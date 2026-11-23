@@ -1,0 +1,165 @@
+---
+# TV7 Player as a media player in Home Assistant: channel list (favorites first), channel logo, start/stop,
+# channel up/down, volume and mute. Uses the app's local API (http://127.0.0.1:8765), nothing else.
+#
+# Installation (once):
+# 1. In configuration.yaml, if not there yet:
+#      homeassistant:
+#        packages: !include_dir_named packages
+# 2. Save this file as packages/tv7.yaml in the Home Assistant configuration folder
+#    (for example with the File editor or Studio Code Server app).
+# 3. Developer tools > YAML > Check configuration, then restart Home Assistant.
+# Result: media_player.tv7, usable in dashboards (media control or tile card) and automations.
+#
+# States: "playing" while a channel runs, "off" when nothing runs (or the app is not running).
+# Turning on starts the last channel again; turning off and stop end playback.
+
+rest_command:
+  tv7:
+    url: "http://127.0.0.1:8765/{{ path }}"
+    timeout: 70     # starting a channel can take a while (multicast first, then HLS)
+
+script:
+  tv7_command:
+    alias: "TV7 command"
+    mode: queued
+    fields:
+      path:
+        description: "API call, for example stop or play?channel=SRF%201"
+    sequence:
+      - action: rest_command.tv7
+        data:
+          path: "{{ path }}"
+      - action: homeassistant.update_entity     # show the result at once, not only at the next poll
+        target:
+          entity_id: sensor.tv7_status
+
+rest:
+  - resource: "http://127.0.0.1:8765/status"
+    scan_interval: 5
+    timeout: 5
+    sensor:
+      - name: "TV7 status"
+        unique_id: tv7_player_status
+        value_template: "{{ 'playing' if value_json.playing else 'off' }}"
+        json_attributes:
+          - channel
+          - source
+          - volume
+          - mute
+
+template:
+  # Channel list and logos from the app: on start, every 10 minutes and whenever the player state changes
+  # (so new favorites from the TV7 page show up soon).
+  - triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: time_pattern
+        minutes: "/10"
+      - trigger: state
+        entity_id: sensor.tv7_status
+    actions:
+      - action: rest_command.tv7
+        data:
+          path: channels
+        response_variable: channels
+        continue_on_error: true
+      - action: rest_command.tv7
+        data:
+          path: favorites
+        response_variable: favorites
+        continue_on_error: true
+    sensor:
+      - name: "TV7 channels"
+        unique_id: tv7_player_channels
+        state: >-
+          {% if channels is defined and channels.status == 200 %}{{ channels.content | count }}{% else %}{{ this.state }}{% endif %}
+        attributes:
+          source_list: >-
+            {% if channels is defined and channels.status == 200 %}
+              {% set ch = channels.content %}
+              {% set fav = favorites.content.favorites if favorites is defined and favorites.status == 200 else [] %}
+              {% set ns = namespace(names=[]) %}
+              {% for pk in fav %}
+                {% for c in ch if c.pk == pk %}{% set ns.names = ns.names + [c.name] %}{% endfor %}
+              {% endfor %}
+              {% for c in ch if c.name not in ns.names %}{% set ns.names = ns.names + [c.name] %}{% endfor %}
+              {{ ns.names }}
+            {% else %}
+              {{ this.attributes.source_list | default([]) }}
+            {% endif %}
+          logos: >-
+            {% if channels is defined and channels.status == 200 %}
+              {{ dict(zip(channels.content | map(attribute='name') | list, channels.content | map(attribute='logo') | list)) }}
+            {% else %}
+              {{ this.attributes.logos | default({}) }}
+            {% endif %}
+
+  # Values the media player needs in another form: the logo of the running channel, volume 0-1 (the app uses 0-130).
+  - sensor:
+      - name: "TV7 channel"
+        unique_id: tv7_player_channel
+        state: "{{ state_attr('sensor.tv7_status', 'channel') or 'none' }}"
+        attributes:
+          logo: >-
+            {{ (state_attr('sensor.tv7_channels', 'logos') or {}).get(state_attr('sensor.tv7_status', 'channel')) }}
+          volume_level: >-
+            {{ [(state_attr('sensor.tv7_status', 'volume') or 0) / 100, 1] | min }}
+
+media_player:
+  - platform: universal
+    name: "TV7"
+    unique_id: tv7_player
+    device_class: tv
+    state_template: "{{ 'playing' if is_state('sensor.tv7_status', 'playing') else 'off' }}"
+    attributes:
+      source: sensor.tv7_status|channel
+      source_list: sensor.tv7_channels|source_list
+      entity_picture: sensor.tv7_channel|logo
+      volume_level: sensor.tv7_channel|volume_level
+      is_volume_muted: sensor.tv7_status|mute
+    commands:
+      turn_on:
+        action: script.tv7_command
+        data:
+          path: "key?k=play"
+      media_play:
+        action: script.tv7_command
+        data:
+          path: "key?k=play"
+      turn_off:
+        action: script.tv7_command
+        data:
+          path: stop
+      media_stop:
+        action: script.tv7_command
+        data:
+          path: stop
+      media_next_track:
+        action: script.tv7_command
+        data:
+          path: "key?k=ch_up"
+      media_previous_track:
+        action: script.tv7_command
+        data:
+          path: "key?k=ch_down"
+      select_source:
+        action: script.tv7_command
+        data:
+          path: "play?channel={{ source | urlencode }}"
+      volume_set:
+        action: script.tv7_command
+        data:
+          path: "volume?v={{ (volume_level * 100) | round(0) | int }}"
+      volume_up:
+        action: script.tv7_command
+        data:
+          path: "volume?d=5"
+      volume_down:
+        action: script.tv7_command
+        data:
+          path: "volume?d=-5"
+      volume_mute:
+        action: script.tv7_command
+        data:
+          path: mute

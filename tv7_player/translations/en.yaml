@@ -1,0 +1,50 @@
+---
+configuration:
+  hdmi_port:
+    name: 'HDMI port'
+    description: 'Which HDMI output the TV is connected to. auto finds it. On a Raspberry Pi, HDMI-A-1 is the port next to the power connector.'
+  hdmi_disconnect:
+    name: 'When the TV is off'
+    description: 'What happens when the TV is switched off, unplugged or shows another source: resume (default) stops and continues the same channel when TV7 is shown again; stop only stops; keep keeps playing (for receivers that wrongly report the TV as off).'
+  cec:
+    name: 'TV remote (HDMI-CEC)'
+    description: 'Use TV7 with the remote of your TV or projector. auto (default) uses it unless Home Assistant''s HDMI-CEC integration already does; the option is then greyed out. off switches it off.'
+  video_mode:
+    name: 'Picture resolution'
+    description: 'auto (default) uses 1080p, which suits the channels. Higher resolutions only add load; the TV scales the picture just as well.'
+  video_refresh:
+    name: 'Picture refresh rate'
+    description: 'auto (default) matches the TV''s refresh rate to the channel for smooth motion. 50 or 60: a fixed rate.'
+  deinterlace:
+    name: 'Deinterlace'
+    description: 'Smooth picture for channels broadcast interlaced (recommended).'
+  hardware_decoding:
+    name: 'Hardware decoding'
+    description: 'auto (default) uses the video decoder of the device where possible, which keeps it cool and quiet. no: off.'
+  video_output:
+    name: 'Video output'
+    description: 'auto (default). Change only if asked to in a bug report.'
+  decode_speed:
+    name: 'Decoding speed'
+    description: 'quality (default). fast saves a little processor load at a barely visible cost in picture quality.'
+  audio_output:
+    name: 'Audio output'
+    description: 'auto (default). If there is no sound, try pulseaudio or alsa.'
+  audio_device:
+    name: 'Audio device (advanced)'
+    description: 'Leave empty. Only for special setups.'
+  audio_language:
+    name: 'Audio language'
+    description: 'Preferred language when a channel offers several. auto: as broadcast.'
+  audio_channels:
+    name: 'Audio channels'
+    description: 'auto passes surround sound on to the receiver; stereo always sends stereo.'
+  start_volume:
+    name: 'Start volume'
+    description: 'Volume when the app starts, 0 to 130 (100 = unchanged).'
+  idle_stop:
+    name: 'Stop without operation'
+    description: 'Stops playback after this many minutes without operation, so the device does not keep playing when nobody watches. off (default): never.'
+  debug:
+    name: 'Debug log'
+    description: 'More details in the app log, for bug reports.'

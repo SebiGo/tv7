@@ -1,0 +1,15 @@
+{
+  // Web server development: no hardware. Run `dev/run-web.sh` (fake mpv) and open http://localhost:8099; tests: `python3 tv7_player/tests/test_control.py`.
+  "name": "TV7 Player (web)",
+  "build": { "dockerfile": "../Dockerfile", "context": ".." },
+  "workspaceFolder": "/workspaces/tv7-player",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/tv7-player,type=bind",
+  "forwardPorts": [8099, 8765],
+  "portsAttributes": { "8099": { "label": "TV7 web UI" }, "8765": { "label": "TV7 API" } },
+  "customizations": {
+    "vscode": {
+      "extensions": ["ms-python.python", "ms-python.vscode-pylance", "timonwong.shellcheck", "redhat.vscode-yaml", "ms-azuretools.vscode-docker"],
+      "settings": { "python.defaultInterpreterPath": "/usr/bin/python3", "files.eol": "\n" }
+    }
+  }
+}

@@ -1,0 +1,80 @@
+---
+name: "TV7 Player"
+version: "0.0.1"
+slug: tv7_player
+description: "Watch Init7 TV7 and the SRG Full HD channels on the TV connected to your Home Assistant device."
+url: "https://github.com/SebiGo/tv7"
+arch:
+  - aarch64
+  - amd64
+hassio_api: true
+homeassistant_api: true
+ingress: true
+ingress_port: 8099
+panel_icon: mdi:television-play
+panel_title: TV7
+panel_admin: false
+startup: application
+boot: auto
+# Multicast (udp://…) needs the host network.
+host_network: true
+# Only the devices the player needs (protection mode stays on; device paths a host does not have are skipped):
+# DRM/KMS output and GPU (dri), buffers for the Raspberry Pi hardware decoder (dma_heap), V4L2 media controllers of the
+# decoders (media), and the ALSA nodes for audio_output: alsa. video: true adds the V4L2 decoders (/dev/video*),
+# audio: true the PulseAudio socket of Home Assistant.
+devices:
+  - /dev/dri/card0
+  - /dev/dri/card1
+  - /dev/dri/card2
+  - /dev/dri/renderD128
+  - /dev/dri/renderD129
+  - /dev/dma_heap/linux,cma
+  - /dev/dma_heap/system
+  - /dev/dma_heap/vidbuf_cached
+  - /dev/media0
+  - /dev/media1
+  - /dev/media2
+  - /dev/media3
+  - /dev/snd/controlC0
+  - /dev/snd/controlC1
+  - /dev/snd/pcmC0D0p
+  - /dev/snd/pcmC1D0p
+  - /dev/snd/timer
+  - /dev/cec0
+  - /dev/cec1
+audio: true
+video: true
+options:
+  hdmi_port: auto
+  hdmi_disconnect: resume
+  cec: auto
+  video_mode: auto
+  video_refresh: auto
+  deinterlace: true
+  hardware_decoding: auto
+  video_output: auto
+  decode_speed: quality
+  audio_output: auto
+  audio_device: ""
+  audio_language: auto
+  audio_channels: auto
+  start_volume: 100
+  idle_stop: "off"
+  debug: false
+schema:
+  hdmi_port: list(auto|HDMI-A-1|HDMI-A-2)
+  hdmi_disconnect: list(resume|stop|keep)
+  cec: list(auto|off)
+  video_mode: list(auto|highest|2160p|1080p|720p)
+  video_refresh: list(auto|50|60)
+  deinterlace: bool
+  hardware_decoding: list(auto|no)
+  video_output: list(auto|drm|gpu)
+  decode_speed: list(quality|fast)
+  audio_output: list(auto|pulseaudio|alsa)
+  audio_device: str?
+  audio_language: list(auto|deu|fra|ita|eng|roh)
+  audio_channels: list(auto|stereo)
+  start_volume: int(0,130)
+  idle_stop: list(off|60|120|180|240|480)
+  debug: bool

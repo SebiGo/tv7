@@ -1,0 +1,50 @@
+---
+configuration:
+  hdmi_port:
+    name: 'Porta HDMI'
+    description: 'A quale uscita HDMI è collegato il televisore. auto la trova. Su un Raspberry Pi, HDMI-A-1 è la porta accanto all''alimentazione.'
+  hdmi_disconnect:
+    name: 'Quando il televisore è spento'
+    description: 'Cosa succede quando il televisore è spento, scollegato o su un''altra sorgente: resume (predefinito) ferma e riprende lo stesso canale quando TV7 viene di nuovo mostrato; stop ferma soltanto; keep continua (per i ricevitori che segnalano per errore il televisore come spento).'
+  cec:
+    name: 'Telecomando (HDMI-CEC)'
+    description: 'Usare TV7 con il telecomando del televisore o del proiettore. auto (predefinito) lo usa, a meno che l''integrazione HDMI-CEC di Home Assistant lo faccia già; l''opzione è allora disattivata. off lo spegne.'
+  video_mode:
+    name: 'Risoluzione dell''immagine'
+    description: 'auto (predefinito) usa 1080p, adatto ai canali. Risoluzioni più alte caricano solo il dispositivo; il televisore ingrandisce l''immagine altrettanto bene.'
+  video_refresh:
+    name: 'Frequenza dell''immagine'
+    description: 'auto (predefinito) adatta la frequenza del televisore al canale, per movimenti fluidi. 50 o 60: fissa.'
+  deinterlace:
+    name: 'Deinterlacciamento'
+    description: 'Immagine stabile per i canali trasmessi in interlacciato (consigliato).'
+  hardware_decoding:
+    name: 'Decodifica hardware'
+    description: 'auto (predefinito) usa se possibile il decodificatore video del dispositivo, che resta così fresco e silenzioso. no: spento.'
+  video_output:
+    name: 'Uscita video'
+    description: 'auto (predefinito). Da cambiare solo se richiesto in una segnalazione di errore.'
+  decode_speed:
+    name: 'Velocità di decodifica'
+    description: 'quality (predefinito). fast risparmia un po'' di carico del processore con una perdita di qualità appena visibile.'
+  audio_output:
+    name: 'Uscita audio'
+    description: 'auto (predefinito). Se manca l''audio, prova pulseaudio o alsa.'
+  audio_device:
+    name: 'Dispositivo audio (avanzato)'
+    description: 'Lasciare vuoto. Solo per configurazioni particolari.'
+  audio_language:
+    name: 'Lingua audio'
+    description: 'Lingua preferita quando un canale ne offre più d''una. auto: come trasmesso.'
+  audio_channels:
+    name: 'Canali audio'
+    description: 'auto inoltra l''audio surround al ricevitore; stereo invia sempre stereo.'
+  start_volume:
+    name: 'Volume iniziale'
+    description: 'Volume all''avvio dell''app, da 0 a 130 (100 = invariato).'
+  idle_stop:
+    name: 'Stop senza utilizzo'
+    description: 'Ferma la riproduzione dopo questi minuti senza utilizzo, così il dispositivo non continua quando nessuno guarda. off (predefinito): mai.'
+  debug:
+    name: 'Registro di debug'
+    description: 'Più dettagli nel registro dell''app, per le segnalazioni di errori.'

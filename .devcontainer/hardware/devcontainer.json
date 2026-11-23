@@ -1,0 +1,13 @@
+{
+  // Real video/audio output: only on a Linux host with a free display (see docs/DEVELOPMENT.md). Needs /dev/dri and /dev/snd on the host.
+  // Switch the host to a text console (Ctrl+Alt+F3), then run `/run.sh` here: the DRM output needs the display exclusively.
+  "name": "TV7 Player (hardware)",
+  "build": { "dockerfile": "../Dockerfile", "context": ".." },
+  "workspaceFolder": "/workspaces/tv7-player",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/tv7-player,type=bind",
+  "runArgs": ["--network=host", "--privileged", "--device=/dev/dri", "--device=/dev/snd"],
+  // run.sh expects the add-on's image layout: files in /, options in /data/options.json.
+  "postCreateCommand": "for f in run.sh supervise.sh control.py ui.html ui-logo.png; do ln -sf /workspaces/tv7-player/tv7_player/rootfs/$f /$f; done; ln -sfn /workspaces/tv7-player/tv7_player/translations /translations; mkdir -p /data && echo '{}' > /data/options.json",
+  "forwardPorts": [8099],
+  "customizations": { "vscode": { "extensions": ["ms-python.python", "timonwong.shellcheck"] } }
+}

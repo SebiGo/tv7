@@ -1,0 +1,704 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TV7 Player</title>
+<style>
+  :root {
+    --bg: #eef0f4; --bg2: #e4e7ee; --card: rgba(255,255,255,.82); --card-solid: #ffffff; --text: #181a1f; --muted: #667080; --line: rgba(24,26,31,.10);
+    --accent: #ed6874; --accent2: #d94a5b; --accent-text: #ffffff; --glow: rgba(237,104,116,.35);
+    --ok: #1f9d57; --bad: #d03a3a; --shadow: 0 8px 28px rgba(30,40,60,.10);
+    --hero: linear-gradient(135deg, #ffffff 0%, #fff0f1 100%);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1115; --bg2: #171a20; --card: rgba(30,34,41,.78); --card-solid: #1e2229; --text: #eceef2; --muted: #98a1ae; --line: rgba(255,255,255,.09);
+      --accent: #f0707c; --accent2: #e04a5c; --glow: rgba(240,112,124,.38);
+      --ok: #46c27a; --bad: #ef6b6b; --shadow: 0 10px 34px rgba(0,0,0,.45);
+      --hero: linear-gradient(135deg, #232831 0%, #2c2026 100%);
+    }
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--bg); }
+  svg.i { width: 1em; height: 1em; fill: currentColor; display: block; }
+  #env-intro { margin: 0 4px 12px; }
+  html { scrollbar-color: var(--muted) transparent; }
+  body { margin: 0; color: var(--text); min-height: 100vh;
+    background: radial-gradient(1200px 500px at 85% -10%, var(--glow), transparent 60%), linear-gradient(180deg, var(--bg), var(--bg2)) fixed;
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 1040px; margin: 0 auto; padding: 18px 16px 40px; }
+  button { font: inherit; cursor: pointer; color: inherit; }
+  [hidden] { display: none !important; }
+  code { font: 13px ui-monospace, Menlo, Consolas, monospace; word-break: break-all; }
+
+  /* header */
+  .top { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
+  .brand { display: flex; align-items: center; gap: 10px; margin-right: auto; }
+  .brand img { height: 34px; width: auto; display: block; }
+  .brand span { font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); font-weight: 600; padding-top: 4px; }
+  .tabs { display: inline-flex; padding: 4px; gap: 4px; background: var(--card); border: 1px solid var(--line); border-radius: 999px; backdrop-filter: blur(8px); }
+  .tab { border: 0; background: transparent; padding: 7px 18px; border-radius: 999px; color: var(--muted); font-weight: 600; transition: .15s; }
+  .tab:hover { color: var(--text); }
+  .tab[aria-selected="true"] { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: var(--accent-text); box-shadow: 0 4px 14px var(--glow); }
+
+  /* nerd mode: a toggle in the same pill as the tabs, and the technical details card */
+  .tab[aria-pressed="true"] { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: var(--accent-text); box-shadow: 0 4px 14px var(--glow); }
+  body:not(.nerd-on) .ch .nr { display: none; }
+  body:not(.nerd-on) .ch .name { font-size: 17px; }
+  .support { display: flex; gap: 10px 14px; align-items: center; flex-wrap: wrap; }
+  .support .hint { margin: 0; flex: 1 1 260px; }
+  .support textarea { width: 100%; min-height: 220px; font: 12px ui-monospace, Menlo, Consolas, monospace; padding: 10px; border-radius: 12px; border: 1px solid var(--line); background: var(--card-solid); color: var(--text); }
+  .nerd-card { font: 13px/1.45 ui-monospace, Menlo, Consolas, monospace; }
+  .nerd-card::before { content: "<nerdmode>"; display: block; color: var(--accent); font-weight: 700; margin-bottom: 10px; }
+  .nerd-card::after { content: "</nerdmode>"; display: block; color: var(--accent); font-weight: 700; margin-top: 10px; }
+  .nerd-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr)); gap: 14px; }
+  .nerd-grid table { font-size: 13px; }
+  .nerd-grid td { padding: 4px 8px; word-break: break-word; }
+  .nerd-grid td:first-child { color: var(--muted); width: 45%; }
+  .nerd-grid h2, .nerd-log-head h2 { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; margin-bottom: 4px; }
+  .nerd-log-head { display: flex; align-items: center; margin-top: 16px; }
+  .nerd-log-head h2 { margin: 0; }
+  .nerd-log { max-height: 260px; overflow: auto; margin: 6px 0 0; padding: 10px 12px; border-radius: 12px; background: var(--card-solid); border: 1px solid var(--line); font-size: 12px; white-space: pre-wrap; word-break: break-word; }
+
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 16px; margin-bottom: 16px; box-shadow: var(--shadow); backdrop-filter: blur(10px); }
+  h2 { font-size: 12px; margin: 0 0 10px; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); font-weight: 700; }
+  .msg { padding: 10px 14px; border-radius: 14px; margin-bottom: 14px; border: 1px solid var(--bad); color: var(--bad); background: var(--card); }
+
+  /* hero / now playing */
+  .hero { background: var(--hero); border: 1px solid var(--line); border-radius: 26px; padding: 22px; margin-bottom: 16px; box-shadow: var(--shadow); position: relative; overflow: hidden; }
+  .hero::after { content: ""; position: absolute; right: -60px; top: -60px; width: 240px; height: 240px; border-radius: 50%; background: radial-gradient(circle, var(--glow), transparent 70%); pointer-events: none; }
+  .hero-logo { height: 56px; width: 92px; object-fit: contain; margin-right: 14px; flex: none; }
+  .titlebar { display: flex; align-items: center; }
+  details.card > summary { cursor: pointer; font-weight: 700; list-style: none; display: flex; align-items: center; gap: 8px; }
+  details.card > summary::before { content: "▸"; color: var(--accent); transition: transform .15s; }
+  details.card[open] > summary::before { transform: rotate(90deg); }
+  details.card > summary::-webkit-details-marker { display: none; }
+  details.card[open] > summary { margin-bottom: 12px; }
+  .footer { text-align: center; font-size: 12px; color: var(--muted); margin: 26px 0 6px; }
+  .hero-row { display: flex; gap: 16px; align-items: center; justify-content: space-between; flex-wrap: wrap; position: relative; z-index: 1; }
+  .kicker { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); font-weight: 700; display: flex; gap: 10px; align-items: center; }
+  .title { font-size: clamp(24px, 5vw, 38px); font-weight: 800; line-height: 1.1; margin: 6px 0 4px; letter-spacing: -.01em; min-height: 1.1em; }
+  .sub { color: var(--muted); font-size: 14px; min-height: 1.3em; }
+  .eq { display: inline-flex; gap: 3px; align-items: flex-end; height: 16px; }
+  .eq i { width: 3px; height: 4px; background: var(--muted); border-radius: 2px; display: block; }
+  .playing .eq i { background: var(--accent); animation: eq 0.9s ease-in-out infinite; }
+  .playing .eq i:nth-child(2) { animation-delay: .15s; } .playing .eq i:nth-child(3) { animation-delay: .3s; } .playing .eq i:nth-child(4) { animation-delay: .45s; }
+  @keyframes eq { 0%, 100% { height: 4px; } 50% { height: 16px; } }
+  @media (prefers-reduced-motion: reduce) { .playing .eq i { animation: none; height: 10px; } }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip { cursor: help; white-space: nowrap; display: inline-block; font-size: 12px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); background: var(--card-solid); font-weight: 600; }
+  .chip.ok { color: var(--ok); border-color: var(--ok); } .chip.bad { color: var(--bad); border-color: var(--bad); }
+  .transport { display: flex; align-items: center; gap: 12px; margin-top: 18px; flex-wrap: wrap; position: relative; z-index: 1; }
+  .round { width: 46px; height: 46px; border-radius: 50%; border: 1px solid var(--line); background: var(--card-solid); font-size: 20px; display: inline-grid; place-items: center; transition: .15s; }
+  .round:hover { border-color: var(--accent); transform: translateY(-1px); }
+  .round.big { width: 64px; height: 64px; font-size: 28px; background: linear-gradient(135deg, var(--accent), var(--accent2)); border: 0; color: var(--accent-text); box-shadow: 0 8px 22px var(--glow); }
+  .round.big:hover { filter: brightness(1.08); }
+  .round:focus-visible, .tab:focus-visible, .ch:focus-visible, .btn:focus-visible, .seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .vol { display: flex; align-items: center; gap: 10px; flex: 1 1 260px; min-width: 220px; margin-left: 8px; }
+  .vol .round { width: 38px; height: 38px; font-size: 18px; }
+  .vol-val { min-width: 3.4em; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; font-weight: 600; }
+  input[type=range] { -webkit-appearance: none; appearance: none; flex: 1; height: 8px; border-radius: 999px; background: var(--line); outline: none; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: var(--accent); border: 3px solid var(--card-solid); box-shadow: 0 2px 8px var(--glow); }
+  input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: var(--accent); border: 3px solid var(--card-solid); }
+
+  /* channel list */
+  .toolbar { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; align-items: center; }
+  .toolbar input[type=search] { flex: 1 1 220px; padding: 11px 16px; border-radius: 999px; border: 1px solid var(--line); background: var(--card-solid); color: var(--text); font: inherit; }
+  .toolbar input[type=search]:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .seg { display: inline-flex; padding: 3px; border: 1px solid var(--line); border-radius: 999px; background: var(--card-solid); }
+  .seg button { border: 0; background: transparent; padding: 7px 14px; border-radius: 999px; font-weight: 600; color: var(--muted); }
+  .seg button[aria-pressed="true"] { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: var(--accent-text); }
+  .btn { border: 1px solid var(--line); background: var(--card-solid); border-radius: 999px; padding: 9px 16px; font-weight: 600; transition: .15s; }
+  .btn:hover { border-color: var(--accent); }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .card + .card { margin-top: 0; }
+  .list-title { display: flex; align-items: center; gap: 8px; }
+  .ch { position: relative; text-align: left; border: 1px solid var(--line); background: var(--card-solid); border-radius: 16px; padding: 11px 12px; display: flex; gap: 10px; align-items: center; transition: transform .12s, border-color .12s, box-shadow .12s; }
+  .ch:hover { transform: translateY(-2px); border-color: var(--accent); box-shadow: 0 8px 20px var(--glow); }
+  .ch .logo { flex: none; width: 84px; height: 54px; object-fit: contain; }
+  .ch .meta { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
+  .ch .nr { font-size: 11px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .ch .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .star { position: absolute; top: 4px; right: 6px; border: 0; background: transparent; color: var(--muted); font-size: 18px; line-height: 1; padding: 4px; cursor: pointer; opacity: .55; }
+  .star:hover, .star.on { opacity: 1; color: #f4b942; }
+  .ch.active .star { color: #fff; }
+  .ch .hd { margin-left: auto; font-size: 10px; font-weight: 800; border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; color: var(--muted); }
+  .ch.active { background: linear-gradient(135deg, var(--accent), var(--accent2)); border-color: transparent; color: var(--accent-text); box-shadow: 0 8px 22px var(--glow); }
+  .ch.active .nr { color: rgba(255,255,255,.8); } .ch.active .hd { color: #fff; border-color: rgba(255,255,255,.5); }
+  .hint { color: var(--muted); font-size: 13px; margin: 10px 2px 0; }
+
+  /* environment */
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+  tr:last-child td { border-bottom: 0; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--muted); margin-right: 6px; }
+  .dot.ok { background: var(--ok); box-shadow: 0 0 8px var(--ok); } .dot.bad { background: var(--bad); }
+  .copy { border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: 1px 9px; font-size: 12px; margin-left: 8px; color: var(--muted); }
+  .copy:hover { color: var(--accent); border-color: var(--accent); }
+  /* restart banner, selects, settings */
+  .banner { position: sticky; top: 8px; z-index: 5; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 10px 14px; border-radius: 14px; margin-bottom: 14px;
+    background: var(--card-solid); border: 1px solid var(--warn); box-shadow: var(--shadow); }
+  .banner b { color: var(--warn); }
+  .selects { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; position: relative; z-index: 1; }
+  .selects label { display: flex; flex-direction: column; gap: 3px; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); font-weight: 700; flex: 1 1 200px; }
+  select, input[type=number], input[type=text] { font: inherit; padding: 9px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--card-solid); color: var(--text); width: 100%; text-transform: none; letter-spacing: 0; font-weight: 500; }
+  select:focus, input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .chip.warn { color: var(--warn); border-color: var(--warn); }
+  .group { margin-bottom: 18px; }
+  .field { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(200px, 1.2fr); gap: 6px 16px; padding: 12px 0; border-bottom: 1px solid var(--line); align-items: center; }
+  .field:last-child { border-bottom: 0; }
+  .field .fname { font-weight: 700; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .field .fdesc { color: var(--muted); font-size: 13px; grid-column: 1; }
+  .field .fctl { grid-row: 1 / span 2; grid-column: 2; }
+  .tag { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--warn); color: var(--warn); font-weight: 700; }
+  .switch { position: relative; width: 48px; height: 28px; display: inline-block; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .switch span { position: absolute; inset: 0; background: var(--line); border-radius: 999px; transition: .15s; cursor: pointer; }
+  .switch span::before { content: ""; position: absolute; width: 22px; height: 22px; left: 3px; top: 3px; border-radius: 50%; background: var(--card-solid); transition: .15s; box-shadow: 0 1px 4px rgba(0,0,0,.3); }
+  .switch input:checked + span { background: linear-gradient(135deg, var(--accent), var(--accent2)); }
+  .switch input:checked + span::before { transform: translateX(20px); }
+  .switch input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .savebar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 6px; }
+  .btn.primary { background: linear-gradient(135deg, var(--accent), var(--accent2)); border-color: transparent; color: var(--accent-text); }
+  @media (max-width: 560px) {
+    .field { grid-template-columns: 1fr; } .field .fctl { grid-row: auto; grid-column: 1; }
+  }
+  @media (max-width: 560px) {
+    .hero { padding: 16px; } .vol { margin-left: 0; }
+    .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .ch .logo { width: 64px; height: 42px; }
+    .ch { flex-direction: column; align-items: flex-start; gap: 6px; position: relative; }
+    .ch .name { white-space: normal; line-height: 1.2; }
+    .ch .hd { position: absolute; top: 8px; right: 8px; margin: 0; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header class="top">
+    <div class="brand"><img src="logo.png" alt="tv7"><span id="h-title">Player</span></div>
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" id="tab-player" aria-selected="true"></button>
+      <button class="tab" role="tab" id="tab-set" aria-selected="false"></button>
+    </div>
+    <div class="tabs"><button class="tab" id="nerd-toggle" aria-pressed="false"></button></div>
+  </header>
+
+  <div id="banner" class="banner" hidden>
+    <span><b id="banner-title"></b> <span id="banner-keys" class="sub"></span></span>
+    <button class="btn primary" id="b-restart" style="margin-left:auto"></button>
+  </div>
+  <div id="msg" class="msg" hidden></div>
+
+  <section id="view-player">
+    <div class="hero" id="hero">
+      <div class="hero-row">
+        <div>
+          <div class="kicker"><span class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span id="kicker"></span></div>
+          <div class="titlebar"><img id="now-logo" class="hero-logo" alt="" hidden><div class="title" id="now-title">–</div></div>
+          <div class="sub" id="now-sub"></div>
+        </div>
+        <div class="chips" id="now-badges"></div>
+      </div>
+      <div class="selects">
+        <label><span id="l-audio"></span><select id="sel-audio"></select></label>
+        <label><span id="l-sub"></span><select id="sel-sub"></select></label>
+      </div>
+      <div class="transport">
+        <button class="round" id="b-prev" aria-label=""></button>
+        <button class="round big" id="b-stop" aria-label=""></button>
+        <button class="round" id="b-next" aria-label=""></button>
+        <div class="vol">
+          <button class="round" id="b-vdown" aria-label="-"></button>
+          <input type="range" id="vol" min="0" max="130" step="1" value="100">
+          <button class="round" id="b-vup" aria-label="+"></button>
+          <span class="vol-val" id="vol-val"></span>
+          <button class="round" id="b-mute" aria-label=""></button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="search-card">
+      <div class="toolbar" style="margin-bottom:0">
+        <input type="search" id="q" autocomplete="off">
+        <div class="seg" role="group" id="src-seg" title="Auto: multicast, then HLS">
+          <button id="src-auto" aria-pressed="true">Auto</button>
+          <button id="src-multicast" aria-pressed="false">Multicast</button>
+          <button id="src-hls" aria-pressed="false">HLS</button>
+        </div>
+        <button class="btn" id="b-refresh"></button>
+      </div>
+    </div>
+    <div class="card" id="card-fav" hidden><h2 id="h-fav"></h2><div class="grid" id="grid-fav"></div></div>
+    <div class="card" id="card-srg" hidden><h2 id="h-srg"></h2><div class="grid" id="grid-srg"></div></div>
+    <div class="card" id="card-tv7"><h2 id="h-tv7"></h2><div class="grid" id="grid-tv7"></div></div>
+    <p class="hint" id="count"></p>
+  </section>
+
+  <section id="view-set" hidden>
+    <div class="card support"><button class="btn primary" id="b-support"></button><p class="hint" id="support-hint"></p>
+      <textarea id="support-text" readonly hidden></textarea></div>
+    <details class="card" id="env-box"><summary id="env-sum"></summary>
+    <p class="hint" id="env-intro"></p>
+    <div class="card"><h2 id="h-hdmi"></h2><div id="env-hdmi"></div></div>
+    <div class="card"><h2 id="h-cec">HDMI-CEC</h2><div id="env-cec"></div></div>
+    <div class="card"><h2 id="h-audio"></h2><div id="env-audio"></div></div>
+    <div class="card"><h2 id="h-video"></h2><div id="env-video"></div></div>
+    <div class="card"><h2 id="h-opts"></h2><div id="env-opts"></div></div>
+  </details>
+    <p class="hint" id="set-intro" style="margin:0 4px 12px"></p>
+    <div id="set-groups"></div>
+    <div class="card nerd-card" id="nerd-card" hidden>
+      <div class="nerd-grid" id="nerd-grid"></div>
+      <div class="nerd-log-head"><h2 id="h-nerd-log"></h2><span id="nerd-copy"></span></div>
+      <pre class="nerd-log" id="nerd-log"></pre>
+      <div class="nerd-log-head"><h2 id="h-cec-log"></h2><span id="cec-copy"></span></div>
+      <pre class="nerd-log" id="cec-log"></pre>
+    </div>
+    <p class="footer" id="version"></p>
+  </section>
+
+
+</main>
+
+<script>
+"use strict";
+const svg = d => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
+const ICON = {
+  prev: svg('<path d="M6 6h2v12H6zM20 6v12L9.5 12z"/>'), next: svg('<path d="M16 6h2v12h-2zM4 6v12l10.5-6z"/>'),
+  stop: svg('<rect x="6" y="6" width="12" height="12" rx="2"/>'), plus: svg('<path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/>'), minus: svg('<path d="M5 11h14v2H5z"/>'),
+  vol: svg('<path d="M4 9v6h4l5 4V5L8 9zM16 8.5a5 5 0 010 7l-1.4-1.4a3 3 0 000-4.2zM18.4 6a8.5 8.5 0 010 12l-1.4-1.4a6.5 6.5 0 000-9.2z"/>'),
+  muted: svg('<path d="M4 9v6h4l5 4V5L8 9zM16.3 9.3l1.4-1.4L20 10.2l2.3-2.3 1.4 1.4-2.3 2.3 2.3 2.3-1.4 1.4-2.3-2.3-2.3 2.3-1.4-1.4 2.3-2.3z" transform="translate(-3 1.8)"/>'),
+};
+// Texts in English, German, French and Italian: i18n/<lang>.json ("ui"), filled in by control.py when it serves this page.
+const I18N = /*I18N*/{};
+const lang = (navigator.language || "en").slice(0, 2).toLowerCase();
+const T = I18N[lang] || I18N.en;
+document.documentElement.lang = I18N[lang] ? lang : "en";
+
+const $ = id => document.getElementById(id);
+const el = (tag, props = {}, ...kids) => {
+  const e = Object.assign(document.createElement(tag), props);
+  for (const k of kids.flat()) if (k != null) e.append(k.nodeType ? k : document.createTextNode(k));
+  return e;
+};
+// All requests are relative so they work behind Home Assistant Ingress.
+async function api(path) {
+  const r = await fetch(path, { cache: "no-store" });
+  let body = null; try { body = await r.json(); } catch (_) {}
+  return { ok: r.ok, status: r.status, body };
+}
+async function apiPost(path, body) {
+  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json", "X-TV7-UI": "1" }, body: JSON.stringify(body || {}) });
+  let b = null; try { b = await r.json(); } catch (_) {}
+  return { ok: r.ok, status: r.status, body: b };
+}
+function showMsg(text) { const m = $("msg"); m.textContent = text || ""; m.hidden = !text; }
+
+// Channel logos are served by the app itself (cached), never loaded straight from another site.
+function logoImg(url, cls) {
+  const i = el("img", { className: cls, alt: "", loading: "lazy", src: "icon?u=" + encodeURIComponent(url) });
+  i.onerror = () => { i.hidden = true; };
+  return i;
+}
+let channels = [], favs = [], status = {}, source = "auto", busy = false, nerdOn = false;
+
+/* ---------- static labels ---------- */
+$("b-prev").innerHTML = ICON.prev; $("b-next").innerHTML = ICON.next; $("b-stop").innerHTML = ICON.stop;
+$("b-vup").innerHTML = ICON.plus; $("b-vdown").innerHTML = ICON.minus; $("b-mute").innerHTML = ICON.vol;
+$("tab-player").textContent = T.player; $("tab-set").textContent = T.settings; $("env-sum").textContent = T.env;
+$("h-fav").textContent = "★ " + T.favTitle; $("h-srg").textContent = T.listSrg; $("h-tv7").textContent = T.listTv7;
+$("banner-title").textContent = T.restartTitle; $("b-restart").textContent = T.restartBtn; $("l-audio").textContent = T.audioTrack; $("l-sub").textContent = T.subTrack;
+$("set-intro").textContent = T.setIntro;
+$("q").placeholder = T.search; $("b-refresh").textContent = T.refresh; $("b-stop").setAttribute("aria-label", T.stop); $("b-stop").title = T.stop; $("kicker").textContent = T.nowPlaying;
+$("b-prev").title = T.prev; $("b-prev").setAttribute("aria-label", T.prev); $("b-next").title = T.next; $("b-next").setAttribute("aria-label", T.next);
+$("h-hdmi").textContent = T.hdmi; $("h-audio").textContent = T.audio; $("h-video").textContent = T.video; $("h-opts").textContent = T.opts;
+$("env-intro").textContent = T.introEnv; $("b-support").textContent = T.supportBtn; $("support-hint").textContent = T.supportHint;
+$("nerd-toggle").textContent = T.nerd; $("nerd-toggle").title = T.nerdTip; $("h-nerd-log").textContent = T.nLog; $("h-cec-log").textContent = T.nCecLog;
+
+/* ---------- tabs ---------- */
+const TABS = { player: "tab-player", set: "tab-set" };
+function tab(name) {
+  for (const n of Object.keys(TABS)) { $("view-" + n).hidden = n !== name; $(TABS[n]).setAttribute("aria-selected", n === name); }
+  if (name === "set") { loadSettings(); if (nerdOn) loadNerd(); }
+}
+$("tab-player").onclick = () => tab("player"); $("tab-set").onclick = () => tab("set");
+$("env-box").addEventListener("toggle", () => { if ($("env-box").open) loadEnv(); });
+
+/* ---------- channels ---------- */
+function tile(c) {
+  const isFav = favs.includes(c.pk);
+  const star = el("button", { className: "star" + (isFav ? " on" : ""), title: isFav ? T.favRemove : T.favAdd, "aria-label": isFav ? T.favRemove : T.favAdd,
+    onclick: e => { e.stopPropagation(); toggleFav(c.pk); } }, isFav ? "★" : "☆");
+  const b = el("div", { className: "ch" + (status.pk === c.pk ? " active" : ""), role: "button", tabIndex: 0, onclick: () => play(c),
+      onkeydown: e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); play(c); } } },
+    c.logo ? logoImg(c.logo, "logo") : null,
+    el("span", { className: "meta" }, el("span", { className: "name" }, c.name), el("span", { className: "nr" }, c.nr ?? "")),
+    c.hd ? el("span", { className: "hd" }, "HD") : null, star);
+  b.dataset.pk = c.pk;
+  return b;
+}
+function renderChannels() {
+  const q = $("q").value.trim().toLowerCase();
+  const match = c => !q || c.name.toLowerCase().includes(q) || String(c.nr) === q;
+  const srg = channels.filter(c => c.list === "srg_fhd" && match(c)), tv7 = channels.filter(c => c.list !== "srg_fhd" && match(c));
+  const fav = favs.map(pk => channels.find(c => c.pk === pk)).filter(Boolean).filter(match);
+  const fill = (id, list) => { $("grid-" + id).replaceChildren(...list.map(tile)); $("card-" + id).hidden = !list.length; };
+  fill("fav", fav); fill("srg", srg); fill("tv7", tv7);
+  const total = channels.length;
+  $("count").textContent = `${srg.length + tv7.length} / ${total} ${T.channels}`;
+}
+async function loadFavs() { const r = await api("favorites"); if (r.ok) favs = r.body.favorites || []; }
+async function toggleFav(pk) {
+  favs = favs.includes(pk) ? favs.filter(x => x !== pk) : [...favs, pk];
+  renderChannels();
+  await apiPost("favorites", { favorites: favs });
+}
+async function loadChannels(refresh) {
+  const r = await api("channels" + (refresh ? "?refresh=1" : ""));
+  if (!r.ok) { showMsg(T.errList + (r.body && r.body.error ? ": " + r.body.error : "")); return; }
+  showMsg(""); channels = r.body.sort((a, b) => (a.nr ?? 1e9) - (b.nr ?? 1e9));
+  await loadFavs();
+  renderChannels();
+}
+async function play(c) {
+  if (busy) return; busy = true;
+  $("now-title").textContent = c.name; $("now-sub").textContent = T.starting;
+  const r = await api(`play?channel=${encodeURIComponent(c.pk)}&source=${source}`);
+  busy = false;
+  if (!r.ok) showMsg(`${T.errPlay}: ${c.name}` + (r.body && r.body.log ? " (" + r.body.log.join("; ") + ")" : r.body && r.body.error ? " (" + r.body.error + ")" : ""));
+  else showMsg("");
+  refresh();
+}
+function step(dir) {
+  if (!channels.length) return;
+  const cur = channels.find(c => c.pk === status.pk), lst = cur ? (cur.list || "tv7") : "tv7";
+  const pool = channels.filter(c => (c.list || "tv7") === lst);
+  if (!pool.length) return;
+  const i = pool.findIndex(c => c.pk === status.pk);
+  play(pool[((i < 0 ? (dir > 0 ? -1 : 0) : i) + dir + pool.length) % pool.length]);
+}
+
+/* ---------- status / transport ---------- */
+function renderStatus() {
+  const s = status, b = $("now-badges"); b.replaceChildren();
+  const hs = s.hdmi_stopped;
+  $("now-title").textContent = busy ? $("now-title").textContent : (s.channel || (hs && hs.channel) || (s.playing ? (s.title || "") : T.nothing));
+  const st = s.stream || {}, out = s.output || {};
+  const res = (w, h, f, unit) => (w && h ? `${w}×${h}` : "") + (f ? `${w && h ? " @ " : ""}${Math.round(f)}${unit}` : "");
+  const as = s.autostopped;
+  if (!busy && hs && !s.channel) $("now-sub").textContent = hs.resume ? T.hdmiPausedResume : T.hdmiPaused;
+  else if (!busy && as && !s.channel) $("now-sub").textContent = as.reason === "cec" ? T.stoppedCec : T.stoppedIdle.replace("{m}", as.minutes);
+  else if (!busy) $("now-sub").textContent = s.playing && nerdOn ? [s.source && `${T.via} ${s.source}`, s.video, s.audio, st.w ? `${T.streamRes} ${res(st.w, st.h, st.fps, " fps")}` : null].filter(Boolean).join(" · ") : "";
+  $("hero").classList.toggle("playing", !!s.playing);
+  const cur = channels.find(c => c.pk === s.pk), hl = $("now-logo");
+  if (cur && cur.logo) { const src = "icon?u=" + encodeURIComponent(cur.logo); if (hl.getAttribute("src") !== src) hl.src = src; hl.hidden = false; hl.onerror = () => { hl.hidden = true; }; }
+  else hl.hidden = true;
+
+  const chip = (cls, text, tip) => b.append(el("span", { className: "chip " + cls, title: tip }, text));
+  const hdmi = Object.values(s.hdmi || {});
+  // Without nerd mode the player stays plain: only a missing HDMI connection is shown.
+  if (!nerdOn) { if (hdmi.length && !hdmi.includes("connected")) chip("bad", "HDMI " + T.disconnected, T.tipHdmi); }
+  else {
+    chip(s.playing ? "ok" : "", s.playing ? T.playing : T.idle, s.playing ? T.tipPlaying : T.tipIdle);
+    if (hdmi.length) chip(hdmi.includes("connected") ? "ok" : "bad", "HDMI " + (hdmi.includes("connected") ? T.connected : T.disconnected), T.tipHdmi);
+    if (s.playing && out.w) chip("", `${T.outRes} ${res(out.w, out.h, out.hz, " Hz")}`, T.tipOut);
+    if (s.playing && s.vo) chip("", `${T.render}: ${/^gpu/.test(s.vo) ? "GPU" : "CPU"}`, T.tipRender);
+    if (s.playing && s.hwdec != null) chip((s.hwdec && s.hwdec !== "no") ? "ok" : "", `${T.decode}: ${(s.hwdec && s.hwdec !== "no") ? T.hw : T.sw}`, T.tipDecode);
+    const sys = s.system || {};
+    if (sys.total != null) chip(sys.total >= 85 ? "warn" : "", `${T.cpu} ${Math.round(sys.total)}%`, T.tipCpu);
+    if (sys.mpv != null) chip(sys.mpv >= 90 ? "warn" : "", `mpv ${Math.round(sys.mpv)}%`, T.tipMpv);
+    if (sys.temp_c != null) chip(sys.temp_c >= 75 ? "warn" : "", `${Math.round(sys.temp_c)} °C`, T.tipTemp);
+  }
+  fillTracks(s); renderBanner(s.pending_restart || []);
+  if (s.volume != null) { $("vol").value = s.volume; $("vol-val").textContent = Math.round(s.volume) + "%"; }
+  $("b-mute").innerHTML = s.mute ? ICON.muted : ICON.vol; $("b-mute").title = s.mute ? T.unmute : T.mute; $("b-mute").setAttribute("aria-label", s.mute ? T.unmute : T.mute);
+  for (const b of document.querySelectorAll(".ch")) b.classList.toggle("active", b.dataset.pk === status.pk);
+}
+async function refresh() {
+  const r = await api("status");
+  if (!r.ok) { showMsg(T.errApi); return; }
+  applyStatus(r.body);
+}
+// The status arrives by itself (server-sent events from /events: at once when something changes, otherwise every few seconds).
+// If that does not work (old browser, a proxy that buffers), the page asks for /status every 2.5 s instead.
+let polling = null;
+function startPolling() { if (!polling) polling = setInterval(refresh, 2500); }
+function startEvents() {
+  if (!window.EventSource) return startPolling();
+  let got = false;
+  const es = new EventSource("events");
+  const giveUp = () => { if (!got) { es.close(); startPolling(); } };
+  const guard = setTimeout(giveUp, 8000);
+  es.onmessage = e => { got = true; clearTimeout(guard); try { applyStatus(JSON.parse(e.data)); } catch (_) {} };
+  es.onerror = () => { if (!got) { clearTimeout(guard); giveUp(); } };   // once it worked, the browser reconnects by itself
+}
+function applyStatus(body) {
+  if ($("msg").textContent === T.errApi) showMsg("");
+  // The page code comes from the app version it was loaded with: after an update, load the new one.
+  if (body.version && window.__tv7v && window.__tv7v !== body.version) { location.reload(); return; }
+  window.__tv7v = body.version || window.__tv7v;
+  status = body; renderStatus();
+  if (nerdOn && !$("view-set").hidden) loadNerd();
+}
+$("b-stop").onclick = async () => { await api("stop"); refresh(); };
+$("b-prev").onclick = () => step(-1); $("b-next").onclick = () => step(1);
+$("b-mute").onclick = async () => { await api("mute"); refresh(); };
+$("b-vup").onclick = async () => { await api("volume?d=5"); refresh(); };
+$("b-vdown").onclick = async () => { await api("volume?d=-5"); refresh(); };
+$("vol").oninput = e => { $("vol-val").textContent = e.target.value + "%"; };
+$("vol").onchange = async e => { await api("volume?v=" + e.target.value); refresh(); };
+$("q").oninput = renderChannels; $("b-refresh").onclick = () => loadChannels(true);
+for (const s of ["auto", "multicast", "hls"]) $("src-" + s).onclick = () => {
+  source = s; for (const x of ["auto", "multicast", "hls"]) $("src-" + x).setAttribute("aria-pressed", x === s);
+};
+
+/* ---------- audio / subtitle tracks ---------- */
+const LANG2 = { deu: "de", ger: "de", fra: "fr", fre: "fr", ita: "it", eng: "en", roh: "rm", spa: "es", por: "pt", nld: "nl", dut: "nl", tur: "tr",
+                srp: "sr", hrv: "hr", slv: "sl", pol: "pl", rus: "ru", ara: "ar", sqi: "sq", alb: "sq", ces: "cs", cze: "cs", hun: "hu" };
+function langName(code) {
+  if (!code || code === "und") return null;
+  const c2 = LANG2[code] || (code.length === 2 ? code : null);
+  try { return c2 ? new Intl.DisplayNames([document.documentElement.lang], { type: "language" }).of(c2) : code.toUpperCase(); } catch (_) { return code.toUpperCase(); }
+}
+function trackLabel(t) {
+  const name = langName(t.lang) || `${T.unknownTrack} ${t.id}`;
+  const extra = [t.codec, t.channels ? t.channels + "ch" : null].filter(Boolean).join(" ");
+  return [name, t.title].filter(Boolean).join(" – ") + (extra ? ` (${extra})` : "");
+}
+let trackSig = "";
+function fillTracks(s) {
+  const a = s.audio_tracks || [], u = s.sub_tracks || [];
+  const sig = JSON.stringify([a.map(t => [t.id, t.selected]), u.map(t => [t.id, t.selected])]);
+  if (sig === trackSig || document.activeElement === $("sel-audio") || document.activeElement === $("sel-sub")) return;
+  trackSig = sig;
+  const sa = $("sel-audio"), ss = $("sel-sub");
+  sa.replaceChildren(...(a.length ? a.map(t => el("option", { value: t.id, selected: t.selected }, trackLabel(t))) : [el("option", { value: "" }, "–")]));
+  sa.disabled = !a.length;
+  ss.replaceChildren(el("option", { value: "off", selected: !u.some(t => t.selected) }, T.off), ...u.map(t => el("option", { value: t.id, selected: t.selected }, trackLabel(t))));
+  ss.disabled = !a.length && !u.length;
+}
+$("sel-audio").onchange = async e => { if (e.target.value) { await api("track?type=audio&id=" + e.target.value); trackSig = ""; refresh(); } };
+$("sel-sub").onchange = async e => { await api("track?type=sub&id=" + e.target.value); trackSig = ""; refresh(); };
+
+/* ---------- restart banner ---------- */
+let restarting = false;
+function renderBanner(keys) {
+  $("banner").hidden = !keys.length && !restarting;
+  $("banner-keys").textContent = restarting ? T.restarting : keys.join(", ");
+  $("b-restart").disabled = restarting;
+}
+$("b-restart").onclick = async () => {
+  restarting = true; renderBanner([]);
+  await apiPost("restart", {});
+  const timer = setInterval(async () => {
+    try { const r = await api("status"); if (r.ok) { clearInterval(timer); location.reload(); } } catch (_) {}
+  }, 2500);
+};
+
+/* ---------- settings ---------- */
+let setCtl = {}, setData = null;
+// Units shown next to the raw option values in the settings drop-downs.
+const OPT_UNIT = { idle_stop: "min" };
+function optLabel(spec, v, unavailable) {
+  const unit = OPT_UNIT[spec.key], text = unit ? (v === "off" ? T.off : `${v} ${unit}`) : String(v);
+  return text + (unavailable ? ` – ${T.notAvail}` : "");
+}
+function buildControl(it, val, data) {
+  const k = it.key, un = it.unavailable || [];
+  if (it.type === "bool") {
+    const i = el("input", { type: "checkbox", checked: !!val }), w = el("label", { className: "switch" }, i, el("span"));
+    setCtl[k] = () => i.checked; return w;
+  }
+  if (it.type === "int") {
+    const i = el("input", { type: "number", min: it.min, max: it.max, step: 1, value: val });
+    setCtl[k] = () => parseInt(i.value, 10); return i;
+  }
+  let opts;
+  if (it.type === "choice") opts = it.choices.map(c => [c, optLabel(it, c, un.includes(c)), un.includes(c) && c !== val]);
+  else { const sug = it.suggestions || []; opts = [["", T.autoOpt, false], ...[...new Set([val, ...sug])].filter(Boolean).map(n => [n, n, false])]; }
+  const sel = el("select", {}, opts.map(([v, l, dis]) => el("option", { value: v, disabled: dis, selected: String(v) === String(val) }, l)));
+  setCtl[k] = () => sel.value;
+  if (it.locked) { sel.disabled = true; return el("div", {}, sel, el("p", { className: "hint" }, T["cecLocked_" + it.locked] || "")); }
+  return sel;
+}
+async function loadSettings() {
+  const r = await api("settings?lang=" + encodeURIComponent(lang));
+  if (!r.ok) { showMsg(T.errApi); return; }
+  const d = setData = r.body; setCtl = {};
+  const root = $("set-groups"); root.replaceChildren();
+  // Technical settings (nerd) show only in nerd mode, unless they differ from the default (then they stay visible, so nothing is changed unseen).
+  // The hidden attribute is set by applyNerd() (also when nerd mode is switched while the settings are open).
+  const nerdOnly = it => it.nerd && String(d.values[it.key]) === String(d.defaults[it.key]);
+  for (const g of ["video", "audio", "system"]) {
+    const items = d.items.filter(x => x.group === g);
+    const card = el("div", { className: "card group" }, el("h2", {}, T["g_" + g]));
+    if (items.every(nerdOnly)) card.dataset.nerdOnly = "1";
+    for (const it of items) {
+      const L = d.labels[it.key] || { name: it.key, description: "" };
+      const field = el("div", { className: "field" },
+        el("div", { className: "fname" }, L.name, it.restart ? el("span", { className: "tag" }, T.needsRestart) : null),
+        el("div", { className: "fdesc" }, L.description),
+        el("div", { className: "fctl" }, buildControl(it, d.values[it.key], d)));
+      if (nerdOnly(it)) field.dataset.nerdOnly = "1";
+      card.append(field);
+    }
+    // One save button per section; it always saves all sections together.
+    const btn = el("button", { className: "btn primary save-btn", disabled: !d.can_save, onclick: () => saveSettings(g) }, T.save);
+    card.append(el("div", { className: "savebar" }, btn, el("span", { className: "sub save-state", id: "save-state-" + g },
+      d.can_save ? "" : T.cannotSave)));
+    root.append(card);
+  }
+  $("version").textContent = d.version ? `TV7 Player v${d.version}` : "";
+  applyNerd();
+  renderBanner(d.pending_restart || []);
+}
+function saveState(g, text) { const e = $("save-state-" + g); if (e) e.textContent = text; }
+async function saveSettings(g) {
+  if (!setData) return;
+  const changed = {};
+  for (const [k, get] of Object.entries(setCtl)) { const v = get(); if (String(v) !== String(setData.values[k])) changed[k] = v; }
+  if (!Object.keys(changed).length) { saveState(g, T.saved); return; }
+  const btns = document.querySelectorAll(".save-btn");
+  btns.forEach(b => { b.disabled = true; }); saveState(g, T.saving);
+  const r = await apiPost("settings", { values: changed });
+  btns.forEach(b => { b.disabled = false; });
+  if (!r.ok) { saveState(g, `${T.errSave}: ${r.body && r.body.error ? r.body.error : r.status}`); return; }
+  const text = T.saved + (r.body.applied_now.length ? ` · ${T.appliedNow}: ${r.body.applied_now.join(", ")}` : "");
+  await loadSettings(); saveState(g, text); refresh();
+}
+
+/* ---------- environment ---------- */
+// Copy to the clipboard. The page runs in Home Assistant's Ingress iframe where the Clipboard API can be blocked,
+// so fall back to a hidden textarea and execCommand. Returns true on success.
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch (_) {}
+  const ta = el("textarea", { value: text, readOnly: true });
+  ta.style.position = "fixed"; ta.style.opacity = "0"; document.body.append(ta); ta.select();
+  let ok = false; try { ok = document.execCommand("copy"); } catch (_) {}
+  ta.remove(); return ok;
+}
+function copyBtn(text) {
+  const b = el("button", { className: "btn copy" }, T.copy);
+  b.onclick = async () => { if (await copyText(text)) { b.textContent = T.copied; setTimeout(() => b.textContent = T.copy, 1200); } };
+  return b;
+}
+$("b-support").onclick = async () => {
+  const b = $("b-support"), ta = $("support-text"); b.disabled = true;
+  try {
+    const r = await api("support");
+    if (!r.ok || !r.body || !r.body.text) { showMsg(T.errApi); return; }
+    const ok = await copyText(r.body.text);
+    $("support-hint").textContent = ok ? T.supportDone : T.copyBlocked;
+    ta.value = r.body.text; ta.hidden = ok;
+    if (!ok) { ta.focus(); ta.select(); }
+    if (ok) setTimeout(() => { $("support-hint").textContent = T.supportHint; }, 6000);
+  } finally { b.disabled = false; }
+};
+function table(head, rows) {
+  return el("table", {}, el("thead", {}, el("tr", {}, head.map(h => el("th", {}, h)))), el("tbody", {}, rows.map(r => el("tr", {}, r.map(c => el("td", {}, c))))));
+}
+async function loadEnv() {
+  const r = await api("environment");
+  if (!r.ok) { showMsg(T.errApi); return; }
+  const e = r.body;
+  $("env-hdmi").replaceChildren(e.hdmi_ports.length ? table([T.port, T.status, T.modes],
+    e.hdmi_ports.map(p => [el("span", {}, el("code", {}, p.name), copyBtn(p.name)),
+      el("span", {}, el("i", { className: "dot " + (p.status === "connected" ? "ok" : "bad") }), p.status === "connected" ? T.connected : p.status === "disconnected" ? T.disconnected : p.status),
+      (p.enabled === "enabled" ? T.enabled + " · " : "") + ((e.drm_modes && e.drm_modes[p.name] ? [...new Set(e.drm_modes[p.name])] : p.modes).join(", ") || "–")])) : el("span", { className: "sub" }, T.none));
+
+  const cur = e.audio.current_device, devs = e.audio.devices.filter(d => d.name !== "auto");
+  const rows = devs.map(d => [el("span", {}, el("code", {}, d.name), copyBtn(d.name)), d.description,
+    d.name === cur ? el("span", { className: "chip ok" }, T.active + (e.audio.current_ao ? " (" + e.audio.current_ao + ")" : "")) : ""]);
+  const sinks = e.audio.pulse_sinks;
+  $("env-audio").replaceChildren(
+    devs.length ? table([T.device, T.description, T.state], rows) : el("span", { className: "sub" }, T.none),
+    el("h2", { style: "margin-top:14px" }, T.sinks),
+    sinks.length ? table([T.device, T.state], sinks.map(s => [el("code", {}, s.name), s.state])) : el("span", { className: "sub" }, T.none),
+    el("p", { className: "hint" }, T.noteCfg));
+
+  const c = e.cec || {};
+  $("env-cec").replaceChildren(
+    el("p", { className: "sub" }, el("i", { className: "dot " + (c.state === "active" ? "ok" : ["error", "no_device"].includes(c.state) ? "bad" : "") }),
+       (T["cec_" + c.state] || c.state || "–") + (c.device ? ` (${c.device})` : "") + (c.detail ? ` – ${c.detail}` : "")),
+    (c.devices || []).length ? table([T.cecType, T.cecName, T.cecPhys, T.cecPower], c.devices.map(d => [d.type || "–", d.name || "–", d.physical || "–", d.power || "–"])) : "",
+    (c.topology || []).length ? el("pre", { className: "nerd-log" }, c.topology.join("\n")) : "");
+  const v = e.video;
+  $("env-video").replaceChildren(table([T.opt, T.val], [[T.hwdec, v.hwdec || "–"], [T.codec, v.codec || "–"], [T.vo, v.vo || "–"], [T.output, v.width ? `${v.width}×${v.height}` + (v.fps ? ` @ ${Math.round(v.fps)} Hz` : "") : "–"], [T.ao, e.audio.current_ao || "–"]]));
+  const o = Object.entries(e.options);
+  $("env-opts").replaceChildren(o.length ? table([T.opt, T.val], o.map(([k, val]) => [el("code", {}, k), String(val)])) : el("span", { className: "sub" }, T.none));
+}
+
+/* ---------- nerd mode ---------- */
+// Off by default; the choice is remembered per browser. On: technical chips in the player and the details card in the settings.
+try { nerdOn = localStorage.getItem("tv7-nerd") === "1"; } catch (_) {}
+function setNerd(on) {
+  nerdOn = on; $("nerd-toggle").setAttribute("aria-pressed", on); $("nerd-card").hidden = !on; document.body.classList.toggle("nerd-on", on);
+  applyNerd();
+  try { on ? localStorage.setItem("tv7-nerd", "1") : localStorage.removeItem("tv7-nerd"); } catch (_) {}
+  if (on && !$("view-set").hidden) loadNerd();
+  renderStatus();
+}
+$("nerd-toggle").onclick = () => setNerd(!nerdOn);
+function applyNerd() { for (const e of document.querySelectorAll("[data-nerd-only]")) e.hidden = !nerdOn; }
+const rate = v => v == null ? null : v >= 1e6 ? (v / 1e6).toFixed(2) + " Mbit/s" : Math.round(v / 1e3) + " kbit/s";
+const num = (v, d = 0) => v == null ? null : Number(v).toFixed(d);
+const join = (...a) => { const x = a.filter(v => v != null && v !== ""); return x.length ? x.join(" · ") : null; };
+let nerdBusy = false, logSig = "", cecSig = "";
+async function loadNerd() {
+  if (nerdBusy) return; nerdBusy = true;
+  try {
+    const r = await api("nerd");
+    if (!r.ok || !nerdOn) return;
+    const n = r.body, v = n.video || {}, f = n.frames || {}, a = n.audio || {}, o = n.output || {}, s = n.system || {}, c = s.clock || {}, m = s.memory || {};
+    const box = (title, rows) => el("div", {}, el("h2", {}, title),
+      el("table", {}, el("tbody", {}, rows.map(([k, val]) => el("tr", {}, el("td", {}, k), el("td", {}, val == null || val === "" ? "–" : String(val)))))));
+    const hw = v.hwdec_current && v.hwdec_current !== "no";
+    $("nerd-grid").replaceChildren(
+      box(T.nStream, [[T.src, n.source], [T.url, n.url], [T.container, n.format]]),
+      box(T.nVideo, [[T.codec, join(v.codec, v.format)], [T.decoder, `${hw ? T.hw : T.sw} (${v.hwdec_current || "no"}, hwdec=${v.hwdec || "–"})`],
+        [T.pixfmt, join(v.pixelformat, v.hw_pixelformat)], [T.res, v.w ? `${v.w}×${v.h}` : null], [T.fps, join(v.fps && num(v.fps, 2) + " fps", v.fps_estimated && "~" + num(v.fps_estimated, 2))],
+        [T.bitrate, rate(v.bitrate)], [T.color, join(v.colormatrix, v.primaries, v.gamma)], [T.deint, v.deinterlace == null ? null : v.deinterlace ? T.yes : T.no], [T.filters, (v.filters || []).join(", ")]]),
+      box(T.nFrames, [[T.dropVo, f.dropped_vo], [T.dropDec, f.dropped_decoder], [T.delayed, f.delayed], [T.mistimed, f.mistimed],
+        [T.avsync, f.avsync == null ? null : (f.avsync * 1000).toFixed(1) + " ms"]]),
+      box(T.nAudio, [[T.codec, join(a.codec_name, a.codec)], [T.aIn, join(a.format, a.samplerate && a.samplerate + " Hz", a.channels)],
+        [T.aOut, join(a.out_format, a.out_samplerate && a.out_samplerate + " Hz", a.out_channels)], [T.bitrate, rate(a.bitrate)], [T.device, a.device], [T.ao, a.ao],
+        [T.volume, a.volume == null ? null : Math.round(a.volume) + " %" + (a.mute ? " (" + T.mute + ")" : "")]]),
+      box(T.nOutput, [[T.vo, o.vo], [T.outRes, o.w ? `${o.w}×${o.h}` + (o.hz ? ` @ ${num(o.hz, 2)} Hz` : "") : null],
+        [T.drmDev, o.drm_device], [T.port, o.drm_connector || T.autoOpt], [T.drmMode, join(o.drm_mode, o.drm_mode_override && "→ " + o.drm_mode_override)],
+        [T.planes, join(o.draw_plane, o.video_plane)], [T.interop, join(o.hwdec_interop, o.hwdec_codecs)],
+        ["DRM planes", (o.planes || []).map(x => `${x.id} ${x.type || ""}: z ${x.zpos ?? "–"}, alpha ${x.alpha ?? "–"}, ${x["pixel blend mode"] || "–"}`).join(" · ")],
+        ["HDMI", Object.entries(o.hdmi || {}).map(([k, x]) => `${k}: ${x}`).join(", ")]]),
+      box(T.nSystem, [[T.cpu, join(s.total != null && Math.round(s.total) + " %", s.mpv != null && "mpv " + Math.round(s.mpv) + " %", s.cores && s.cores + " cores")],
+        [T.load, (s.loadavg || []).join(" / ")], [T.temp, s.temp_c != null ? s.temp_c + " °C" : null],
+        [T.clock, join(c.mhz && c.mhz + " MHz", c.max_mhz && "max " + c.max_mhz + " MHz", c.governor)],
+        [T.mem, m.available_mib != null ? `${m.available_mib} / ${m.total_mib} MiB` : null]]),
+      box(T.nMpv, [[T.version, (n.mpv || {}).version], ["FFmpeg", (n.mpv || {}).ffmpeg], ["PID", (n.mpv || {}).pid], ["App", (n.app || {}).version]]));
+    const log = (n.log || []).join("\n"), pre = $("nerd-log");
+    if (log !== logSig) {
+      const atEnd = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 30;
+      logSig = log; pre.textContent = log || T.nLogEmpty;
+      if (atEnd) pre.scrollTop = pre.scrollHeight;
+      $("nerd-copy").replaceChildren(log ? copyBtn(log) : "");
+    }
+    const ce = n.cec || {}, clog = (ce.log || []).join("\n"), cpre = $("cec-log");
+    const cempty = ce.state === "active" ? T.nCecEmpty : `${T["cec_" + ce.state] || ce.state || "–"}`;
+    if (clog + cempty !== cecSig) {
+      const atEnd = cpre.scrollHeight - cpre.scrollTop - cpre.clientHeight < 30;
+      cecSig = clog + cempty; cpre.textContent = clog || cempty;
+      if (atEnd) cpre.scrollTop = cpre.scrollHeight;
+      $("cec-copy").replaceChildren(clog ? copyBtn(clog) : "");
+    }
+  } finally { nerdBusy = false; }
+}
+setNerd(nerdOn);
+
+/* ---------- start ---------- */
+$("b-mute").title = T.mute; $("b-mute").setAttribute("aria-label", T.mute);
+loadChannels(false); refresh(); startEvents();
+</script>
+</body>
+</html>

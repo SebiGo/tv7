@@ -1,0 +1,84 @@
+#include <tunables/global>
+
+# AppArmor profile of the TV7 Player app, enforced. The Supervisor loads it instead of Docker's default profile and replaces
+# the profile name with the app ID. A rule that is missing shows up as apparmor="DENIED" in the kernel log of the host
+# (journalctl _TRANSPORT=audit -g 'apparmor="DENIED"'), and in the app log only as its effect (e.g. "Permission denied").
+profile tv7_player flags=(attach_disconnected,mediate_deleted) {
+  #include <abstractions/base>
+
+  # Capabilities: the ones of Docker's default set that the scripts, Python and mpv use; config.yaml requests no extra ones.
+  capability chown,
+  capability dac_override,
+  capability fowner,
+  capability fsetid,
+  capability kill,
+  capability setgid,
+  capability setuid,
+  capability net_bind_service,
+  capability net_raw,
+
+  # Network: multicast and HLS streams, Init7 channel list, Supervisor API, web UI/API server, mpv and PulseAudio sockets.
+  network inet,
+  network inet6,
+  network unix,
+  network netlink raw,
+
+  # Signals within the app (supervise.sh, timeout) and from Docker when the app is stopped.
+  signal (send, receive) peer=@{profile_name},
+  signal (receive) peer=unconfined,
+  # Reading /proc/<pid>/stat of mpv for its CPU load.
+  ptrace (read) peer=@{profile_name},
+
+  # No mounting, no writing to /sys (HDMI state, temperature and clock are only read).
+  deny mount,
+  deny umount,
+  deny pivot_root,
+  deny /sys/** w,
+
+  # Programs: only these may be started (paths after symlinks: /bin is /usr/bin, python3 is python3.x). A program
+  # missing here fails with "Permission denied" and shows up as apparmor="DENIED" in the host log.
+  /{,usr/}{,s}bin/docker-init ix,
+  /run.sh rix,
+  /control.py r,
+  / r,                  # list the folder of control.py: Python finds the package tv7 there (without it: "No module named 'tv7'")
+  /tv7/{,**} r,
+  /tv7-idle.lua r,
+  /{,usr/}bin/{bash,python3,python3.[0-9]*,mpv,modetest,cec-ctl,pactl,aplay} rix,
+  /{,usr/}lib/** rm,
+  /usr/libexec/** rm,
+
+  # Read-only files: web UI, texts, translations, configuration, shared data (Mesa, ALSA, fonts, certificates).
+  /ui.html r,
+  /ui-logo.png r,
+  /translations/{,**} r,
+  /i18n/{,**} r,
+  /etc/** r,
+  /usr/share/** r,
+  /var/cache/** r,
+  /var/lib/** r,
+
+  # Files the app writes: options/favorites/logos, runtime files (mode files, mpv socket), caches of mpv/Mesa/fontconfig.
+  /data/{,**} rw,
+  /tmp/{,**} rwk,
+  /root/{,**} rwk,
+  /dev/shm/{,**} rwk,
+  /run/audio/{,**} rw,
+
+  # Devices (mapped in config.yaml): display and GPU, decoder buffers and media controllers, V4L2 decoders, ALSA, HDMI-CEC.
+  /dev/ r,
+  /dev/dri/{,**} rw,
+  /dev/dma_heap/{,**} rw,
+  /dev/media* rw,
+  /dev/video* rw,
+  /dev/snd/{,**} rw,
+  /dev/cec* rw,
+  /dev/tty rw,
+  /dev/pts/* rw,
+
+  # System information: CPU load, memory, ALSA status, HDMI state, temperature, clock, decoder names.
+  @{PROC}/{,**} r,
+  # Thread names (mpv, PulseAudio/PipeWire clients set them for their own threads).
+  owner @{PROC}/@{pid}/task/@{tid}/comm rw,
+  owner @{PROC}/@{pid}/comm rw,
+  /sys/{,**} r,
+}

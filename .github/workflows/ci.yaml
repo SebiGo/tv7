@@ -1,0 +1,45 @@
+---
+name: CI
+
+# yamllint disable-line rule:truthy
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint (YAML, shell)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Install yamllint and shellcheck
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends yamllint shellcheck
+      - name: yamllint
+        run: yamllint -c .yamllint tv7_player .github repository.yaml docs
+      - name: shellcheck
+        run: shellcheck tv7_player/rootfs/run.sh tv7_player/pi-debs.sh dev/*.sh
+
+  test:
+    name: Tests (fake mpv, HDMI, Init7)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Install PyYAML
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends python3-yaml
+      - name: Test suite
+        working-directory: tv7_player
+        run: python3 tests/test_control.py
+
+  build:
+    name: Build the image (amd64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: docker build
+        run: docker build --build-arg BUILD_VERSION=ci --build-arg BUILD_ARCH=amd64 -t tv7-player:ci tv7_player
