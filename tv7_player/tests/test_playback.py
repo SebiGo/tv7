@@ -1,4 +1,5 @@
-"""Channel list, channel start (multicast, HLS, retries, no display), source choice, volume, tracks, /status and /events."""
+"""Channel list, channel start (multicast, HLS, retries, no display), source choice, volume, tracks, /status and
+/events."""
 
 import threading
 import time

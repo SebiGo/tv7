@@ -2,8 +2,8 @@
 """A fake mpv for the tests and for developing the web UI without a display, sound card or TV7 network (dev/run-web.sh).
 
 It answers mpv's JSON IPC like mpv does: a connection stays open for any number of commands, request ids are echoed, log
-messages are pushed to a client that asks for them, and "quit" ends the client's connection (as when mpv restarts, with a new
-pid). It "plays" whatever it is told to load. Everything it is told is recorded in `state` for the tests.
+messages are pushed to a client that asks for them, and "quit" ends the client's connection (as when mpv restarts, with
+a new pid). It "plays" whatever it is told to load. Everything it is told is recorded in `state` for the tests.
 
 Module:     MockMpv(socket_path, state, can_start=lambda url: True, log_lines=[...]).serve()
 Standalone: python3 mock_mpv.py <socket path>       (sends a log line every few seconds)

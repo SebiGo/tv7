@@ -7,9 +7,10 @@ import time
 
 from tv7 import config, display, hwdec, mpvclient, png, settings
 
-# control.py starts mpv itself (run.sh only starts control.py): it chooses the video output, hardware decoding, output mode and
-# audio device, starts mpv and starts it again whenever it ends (a crash must not leave the player dead; a channel start asks
-# for a restart with "quit" to change the output mode or to choose the video output once a display is there).
+# control.py starts mpv itself (run.sh only starts control.py): it chooses the video output, hardware decoding, output
+# mode and audio device, starts mpv and starts it again whenever it ends (a crash must not leave the player dead; a
+# channel start asks for a restart with "quit" to change the output mode or to choose the video output once a display is
+# there).
 MPV_BIN = "mpv"
 WAIT_HDMI_S = 60.0  # wait this long for a display at start
 RESTART_PAUSE_S = 1.0
@@ -21,8 +22,8 @@ mpv_proc = {"p": None, "stop": False}
 
 
 def probe_gpu(drm_args):
-    """Does the GPU output (OpenGL on the DRM display) work? Tried in a short throw-away mpv: a failed GPU start inside the real mpv
-    leaves the display locked, so a fallback inside the same process would fail too."""
+    """Does the GPU output (OpenGL on the DRM display) work? Tried in a short throw-away mpv: a failed GPU start inside
+    the real mpv leaves the display locked, so a fallback inside the same process would fail too."""
     try:
         return (
             subprocess.run(
@@ -48,8 +49,8 @@ def probe_gpu(drm_args):
 
 
 def setup_video(opts, drm_args):
-    """Video output, hardware decoding and output mode. Without a display the GPU cannot be probed and there are no modes yet: the
-    choice stays pending (plain DRM) and is made again before mpv restarts once a display is there."""
+    """Video output, hardware decoding and output mode. Without a display the GPU cannot be probed and there are no
+    modes yet: the choice stays pending (plain DRM) and is made again before mpv restarts once a display is there."""
     pending = "no"
     if not display.hdmi_ok():
         vo, pending = "drm", "yes"
@@ -90,9 +91,9 @@ def pulse_sinks():
 
 
 def audio_args(connector):
-    """Audio device. Home Assistant's audio service (PulseAudio) may already own the HDMI ALSA card ("Device or resource busy"), so
-    a PulseAudio HDMI sink comes first, then the ALSA device of the connector (HDMI-A-1 = vc4hdmi0, HDMI-A-2 = vc4hdmi1), then
-    any ALSA HDMI device; otherwise mpv chooses."""
+    """Audio device. Home Assistant's audio service (PulseAudio) may already own the HDMI ALSA card ("Device or resource
+    busy"), so a PulseAudio HDMI sink comes first, then the ALSA device of the connector (HDMI-A-1 = vc4hdmi0, HDMI-A-2
+    = vc4hdmi1), then any ALSA HDMI device; otherwise mpv chooses."""
     pulse = next((f"pulse/{x['name']}" for x in pulse_sinks() if "hdmi" in x["name"].lower()), "")
     try:
         aplay = subprocess.run(["aplay", "-L"], capture_output=True, text=True, timeout=5).stdout.splitlines()
@@ -163,8 +164,9 @@ def wait_hdmi():
 
 
 def before_start(opts, drm_args):
-    """Before every start of mpv: make a pending video output choice once a display is there, and make the overlay planes opaque
-    (mpv draws its OSD there and does not set their alpha; a value left behind made it nearly invisible)."""
+    """Before every start of mpv: make a pending video output choice once a display is there, and make the overlay
+    planes opaque (mpv draws its OSD there and does not set their alpha; a value another program left there makes the
+    OSD nearly invisible)."""
     if display.VIDEO["pending"] == "yes" and display.hdmi_ok():
         setup_video(opts, drm_args)
     try:

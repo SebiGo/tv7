@@ -46,8 +46,9 @@ def cec_run(world):
             return f.read()
 
     def run(mode, on, core=None, during=None, rx=False):
-        """Start control.py with cec auto/off; core = Home Assistant's /api/config (None: not reachable); during(st) runs
-        while the state is "waiting". Returns the CEC state (plus what was seen), the cec-ctl calls and the settings item."""
+        """Start control.py with cec auto/off; core = Home Assistant's /api/config (None: not reachable); during(st)
+        runs while the state is "waiting". Returns the CEC state (plus what was seen), the cec-ctl calls and the
+        settings item."""
         with open(f"{tmp}/cec-mode", "w") as f:
             f.write(mode)
         open(f"{tmp}/cec-calls", "w").close()

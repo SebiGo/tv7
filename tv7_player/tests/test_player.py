@@ -1,5 +1,5 @@
-"""Starting and supervising mpv (tv7/mpvhost.py, tv7/display.py), called directly: decoder choice per device, audio device,
-video output without a display, and the restart loop (with a fake mpv program)."""
+"""Starting and supervising mpv (tv7/mpvhost.py, tv7/display.py), called directly: decoder choice per device, audio
+device, video output without a display, and the restart loop (with a fake mpv program)."""
 
 import os
 import subprocess

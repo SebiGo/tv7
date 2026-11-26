@@ -5,7 +5,7 @@ import zlib
 
 
 def png_to_bgra(path):
-    """Decode a PNG file into premultiplied BGRA, the raw format of mpv's overlay-add. Returns (width, height, bytes)."""
+    """Decode a PNG file into premultiplied BGRA (mpv's overlay-add format). Returns (width, height, bytes)."""
     return png_bytes_to_bgra(open(path, "rb").read())
 
 

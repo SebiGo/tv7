@@ -1,5 +1,6 @@
 """Home Assistant's Supervisor API: the app's options and restart, its log, the system versions, and Core's /api/config.
-All calls need the token the Supervisor gives the app (hassio_api); without it (development, tests without it) they are off."""
+All calls need the token the Supervisor gives the app (hassio_api); without it (development, tests without it) they are
+off."""
 
 import json
 import re
@@ -66,5 +67,6 @@ def app_log(lines):
 
 
 def restart_app(delay=0.5):
-    """Ask the Supervisor to restart the app, after delay (so the answer to the request that asked for it still goes out)."""
+    """Ask the Supervisor to restart the app, after delay (so the answer to the request that asked for it still goes
+    out)."""
     threading.Thread(target=lambda: (time.sleep(delay), post("/addons/self/restart")), daemon=True).start()

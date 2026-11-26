@@ -22,8 +22,8 @@ _IPV6_MAC_RE = re.compile(
 
 def redact(text):
     """Mask what does not belong into a public issue: tokens/passwords, URL query strings (may carry session tokens),
-    unicast IPv4 addresses (multicast group addresses of the channels and 127.0.0.1/0.0.0.0 stay; HDMI-CEC physical addresses such
-    as 1.1.0.0, four single digits, stay too), IPv6 and MAC addresses."""
+    unicast IPv4 addresses (multicast group addresses of the channels and 127.0.0.1/0.0.0.0 stay; HDMI-CEC physical
+    addresses such as 1.1.0.0, four single digits, stay too), IPv6 and MAC addresses."""
 
     def ip(m):
         if all(len(x) == 1 for x in m.group(0).split(".")):
@@ -243,7 +243,7 @@ def support_text():
                 ("Stop without operation (idle_stop)", settings.current_values().get("idle_stop")),
                 (
                     "Last automatic stop",
-                    f"{player.state.autostopped['reason']}: {player.state.autostopped['channel']} at {ts(player.state.autostopped['t'])}"
+                    "{reason}: {channel} at ".format(**player.state.autostopped) + ts(player.state.autostopped["t"])
                     if player.state.autostopped
                     else None,
                 ),
@@ -264,7 +264,9 @@ def support_text():
                 "| Address | Type | Name | Vendor | Physical | Power |",
                 "|---|---|---|---|---|---|",
                 *[
-                    f"| {d['address']} | {d['type']} | {d['name'] or '–'} | {d['vendor'] or '–'} | {d['physical'] or '–'} | {d['power'] or '–'} |"
+                    "| "
+                    + " | ".join(str(d[k] or "–") for k in ("address", "type", "name", "vendor", "physical", "power"))
+                    + " |"
                     for d in env["cec"]["devices"]
                 ],
                 "",
@@ -340,7 +342,8 @@ def support_text():
             if n["cec"]["log"]
             else []
         ),
-        f"<details><summary>App log (last {len(alog)} lines; turn on the debug option and restart for the full device diagnosis)</summary>",
+        f"<details><summary>App log (last {len(alog)} lines; "
+        "turn on the debug option and restart for the full device diagnosis)</summary>",
         "",
         "```",
         *(alog or ["(not available)"]),

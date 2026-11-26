@@ -1,5 +1,5 @@
-"""What plays: channel start and stop on one worker thread, mpv restarts, the output mode that follows the stream, and the
-automatic stops and resumes (HDMI display gone, no operation, TV switched away over HDMI-CEC).
+"""What plays: channel start and stop on one worker thread, mpv restarts, the output mode that follows the stream, and
+the automatic stops and resumes (HDMI display gone, no operation, TV switched away over HDMI-CEC).
 
 The playback state is `state`. Only this module changes it; the web UI, the TV menu and the support text read it."""
 
@@ -33,8 +33,8 @@ class Playback:
 
 state = Playback()
 
-# resume(ch, source): starts a channel again after the TV showed another source. control.py sets it to the TV menu's start,
-# which shows the channel banner; without it the channel starts in the background.
+# resume(ch, source): starts a channel again after the TV showed another source. control.py sets it to the TV menu's
+# start, which shows the channel banner; without it the channel starts in the background.
 handlers = {"resume": lambda ch, source: player(_play, ch, source, wait=False)}
 
 
@@ -53,8 +53,8 @@ def _stop_playback():
 
 
 def restart_mpv(log, reason):
-    """Quit mpv; the supervision starts it again (with the current video output and output mode). Waits for the new process,
-    restores volume/mute."""
+    """Quit mpv; the supervision starts it again (with the current video output and output mode). Waits for the new
+    process, restores volume/mute."""
     log.append(f"{reason} (mpv restarts)")
     keep = {"volume": mpvclient.prop("volume"), "mute": mpvclient.prop("mute")}
     old_pid = mpvclient.prop("pid")
@@ -79,9 +79,9 @@ def restart_mpv(log, reason):
         mpvclient.mpv("set_property", "mute", True)
 
 
-# Everything that changes what plays (start, stop, automatic stops and resumes, configuration switches) runs on one thread, in
-# the order it was asked for, so these actions never overlap. Callers wait for the result or not; code holding _menu_lock never
-# waits (the worker takes that lock to update the banner).
+# Everything that changes what plays (start, stop, automatic stops and resumes, configuration switches) runs on one
+# thread, in the order it was asked for, so these actions never overlap. Callers wait for the result or not; code
+# holding _menu_lock never waits (the worker takes that lock to update the banner).
 _player_pool = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="player")
 
 
@@ -108,8 +108,8 @@ def player(fn, *args, wait=True):
 
 
 def play(ch, source="auto"):
-    """A start someone asked for (web UI, API, TV menu, resume after CEC): clears the notes of automatic stops and keeps the
-    result and log for the support text. Returns {"ok", "channel", "source", "log", ...}."""
+    """A start someone asked for (web UI, API, TV menu, resume after CEC): clears the notes of automatic stops and keeps
+    the result and log for the support text. Returns {"ok", "channel", "source", "log", ...}."""
     return player(_play, ch, source)
 
 
@@ -175,8 +175,8 @@ def _start(ch, source):
                     and (mpvclient.prop("time-pos") or 0) > 0
                     and not mpvclient.prop("video-codec")
                 ):
-                    # The stream runs (time advances) but mpv has no picture output: no display on HDMI. Other attempts or
-                    # sources would end the same way.
+                    # The stream runs (time advances) but mpv has no picture output: no display on HDMI. Other attempts
+                    # or sources would end the same way.
                     log.append(f"{src}: the stream is received, but no display is connected to HDMI (no picture)")
                     try:
                         mpvclient.mpv("stop")
@@ -215,8 +215,8 @@ def match_refresh(log):
 
 
 def hdmi_watch_step(timers):
-    """One check. Stops playback when no HDMI display is connected for config.HDMI_OFF_S and starts the same channel again when the
-    display is back for config.HDMI_BACK_S. timers keeps the times between calls."""
+    """One check. Stops playback when no HDMI display is connected for config.HDMI_OFF_S and starts the same channel
+    again when the display is back for config.HDMI_BACK_S. timers keeps the times between calls."""
     if not display.connectors():
         timers.clear()
         state.hdmi_stopped.clear()
@@ -257,8 +257,8 @@ def _hdmi_stop():
         pass
     _clear_current()
     config.log_line(
-        f"No HDMI display for {config.HDMI_OFF_S:g} s: playback of {state.hdmi_stopped['name']} stopped, it resumes when the display"
-        " is back"
+        f"No HDMI display for {config.HDMI_OFF_S:g} s: playback of {state.hdmi_stopped['name']} stopped, "
+        "it resumes when the display is back"
     )
 
 
@@ -285,7 +285,8 @@ def _auto_stop(reason, text, extra):
 
 
 def autostop_step():
-    """No operation for idle_stop minutes while a channel plays: stop, so the app does not load the system when nobody watches."""
+    """No operation for idle_stop minutes while a channel plays: stop, so the app does not load the system when nobody
+    watches."""
     idle = settings.current_values().get("idle_stop", "off")
     if idle != "off" and state.current["pk"] and time.time() - state.last_activity >= float(idle) * config.MINUTE_S:
         name = state.current["name"]
@@ -298,8 +299,8 @@ def tv_standby():
 
 
 def tv_gone(reason):
-    """The TV switched to standby (at once) or to another source (after config.CEC_AWAY_S): stop like for a missing display, and
-    start the same channel again when the TV shows the app again."""
+    """The TV switched to standby (at once) or to another source (after config.CEC_AWAY_S): stop like for a missing
+    display, and start the same channel again when the TV shows the app again."""
     player(_tv_gone, reason)
 
 

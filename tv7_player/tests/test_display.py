@@ -32,7 +32,8 @@ def test_planes_with_a_picture():
 
 
 def test_plane_fixes():
-    """Overlay plane left at alpha 3084 / Coverage (seen on the Pi 5): set to opaque and pre-multiplied; others untouched."""
+    """Overlay plane left at alpha 3084 / Coverage (seen on the Pi 5): set to opaque and pre-multiplied; others
+    untouched."""
     text = (PLANE_HEAD + "83\t71\t90\t0,0\t\t0,0\t0\t0x1\n  props:\n" + TYPE.format(1) + "\t38 alpha:\n\t\tvalues: 0 65535\n\t\tvalue: 65535\n"
             + "107\t71\t91\t0,0\t\t0,0\t0\t0x1\n  props:\n" + TYPE.format(0) + "\t38 alpha:\n\t\tvalues: 0 65535\n\t\tvalue: 3084\n"
             + BLEND.format(1)

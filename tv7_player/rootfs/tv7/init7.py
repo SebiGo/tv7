@@ -34,7 +34,8 @@ def sync_info():
 
 
 def logo_file(url):
-    """Channel logo (PNG/JPEG) from Init7: only URLs under config.LOGO_PREFIXES, cached on disk. Returns (bytes, content type)."""
+    """Channel logo (PNG/JPEG) from Init7: only URLs under config.LOGO_PREFIXES, cached on disk. Returns (bytes, content
+    type)."""
     if (
         not url.startswith(config.LOGO_PREFIXES)
         or not re.search(r"\.(png|jpe?g)$", url, re.I)
@@ -130,7 +131,8 @@ def srg_fhd_channels():
 
 
 def channels(force=False):
-    """Current channel lists (TV7 from the Init7 config.INIT7_API, plus SRG Full HD); on a network error the last loaded lists are used."""
+    """Current channel lists (TV7 from the Init7 config.INIT7_API, plus SRG Full HD); on a network error the last loaded
+    lists are used."""
     if force or time.time() - _cache["t"] > CACHE_S or not _cache["data"]:
         _sync["tried"] = time.time()
         try:
@@ -173,9 +175,9 @@ def find_channel(sel):
 
 
 def multicast_url(src):
-    """udp://@233.x.x.x:port -> ffmpeg notation; real multicast addresses only. The receive buffer (fifo_size, in 188-byte packets,
-    about 12 MB) bridges a few seconds in which the player does not read; overrun_nonfatal drops packets instead of ending the
-    stream when it still overflows (a short picture glitch instead of a stop)."""
+    """udp://@233.x.x.x:port -> ffmpeg notation; real multicast addresses only. The receive buffer (fifo_size, in
+    188-byte packets, about 12 MB) bridges a few seconds in which the player does not read; overrun_nonfatal drops
+    packets instead of ending the stream when it still overflows (a short picture glitch instead of a stop)."""
     m = re.fullmatch(r"udp://@?(\d{1,3}(?:\.\d{1,3}){3}):(\d{2,5})", src or "")
     if not m or not ipaddress.ip_address(m[1]).is_multicast:
         return None

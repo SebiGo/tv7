@@ -4,7 +4,10 @@ line-length = 120
 
 [lint]
 select = ["E", "F", "W", "I", "B", "UP"]
-ignore = ["E501"]   # the formatter keeps code within line-length; long strings and comments are left as they are
+
+[lint.per-file-ignores]
+# test data (fake cec-ctl, modetest output, DRM planes) stays as the real programs print it
+"tv7_player/tests/*" = ["E501"]
 
 [lint.isort]
 known-first-party = ["tv7", "mock_mpv", "fakes"]

@@ -14,7 +14,7 @@ from tv7 import cec, config, display, init7, mpvclient, player, settings, superv
 
 
 def status_view():
-    """What the web UI shows: what plays, HDMI, volume, tracks, output, system load, automatic stops, pending restart."""
+    """What the web UI shows: what plays, HDMI, volume, tracks, output, load, automatic stops, pending restart."""
     return {
         "hdmi": display.hdmi_status(),
         "playing": mpvclient.playing(),
@@ -61,12 +61,19 @@ def _arg(q, name, choices=None):
 
 
 def get_channels(h, q):
-    keys = ("nr", "name", "pk", "hd", "multicast", "hls", "list", "logo")
     return 200, [
-        dict(zip(keys, (c.get("ordernum"), c["name"], c["pk"], c.get("hd"), init7.multicast_url(c.get("src")) is not None,
-                        c.get("has_hls"), c.get("list", "tv7"), c.get("logo")), strict=True))
+        {
+            "nr": c.get("ordernum"),
+            "name": c["name"],
+            "pk": c["pk"],
+            "hd": c.get("hd"),
+            "multicast": init7.multicast_url(c.get("src")) is not None,
+            "hls": c.get("has_hls"),
+            "list": c.get("list", "tv7"),
+            "logo": c.get("logo"),
+        }
         for c in init7.channels(force="refresh" in q)
-    ]  # fmt: skip
+    ]
 
 
 def get_play(h, q):
@@ -126,8 +133,8 @@ def get_icon(h, q):
 
 
 def get_events(h, q):
-    """Server-sent events: the status (as /status) at once, then whenever it changes, and at least every config.EVENTS_S (CPU load,
-    temperature and dropped frames change all the time). Ends when the client goes away."""
+    """Server-sent events: the status (as /status) at once, then whenever it changes, and at least every config.EVENTS_S
+    (CPU load, temperature and dropped frames change all the time). Ends when the client goes away."""
     h.send_response(200)
     h.send_header("Content-Type", "text/event-stream")
     h.send_header("Cache-Control", "no-cache")
@@ -262,7 +269,8 @@ class UiH(H):
     def do_POST(self):
         if not self.allowed():
             return
-        # A custom header makes cross-site form posts impossible (browsers would need a CORS preflight, which is never granted).
+        # A custom header makes cross-site form posts impossible (browsers would need a CORS preflight, which is never
+        # granted).
         if self.headers.get("X-TV7-UI") != "1":
             return self.reply(403, {"error": "missing X-TV7-UI header"})
         try:

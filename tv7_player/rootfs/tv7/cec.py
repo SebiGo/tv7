@@ -1,7 +1,7 @@
 """HDMI-CEC: whether the port is free, registration as "TV7", the received messages and the answers to the TV.
 
-What the TV tells goes to `handlers` (set at start in control.py): remote control keys, standby, and which physical address
-the TV shows. This module only talks to the bus; what playback does about it is in tv7/player.py."""
+What the TV tells goes to `handlers` (set at start in control.py): remote control keys, standby, and which physical
+address the TV shows. This module only talks to the bus; what playback does about it is in tv7/player.py."""
 
 import glob
 import re
@@ -17,8 +17,8 @@ CEC_LOCKED = ("ha_integration", "in_use")  # states in which the web UI greys ou
 
 
 def ha_cec_integration():
-    """Wait until Home Assistant Core has started (its integrations are loaded), then tell whether its HDMI-CEC integration
-    runs. None: Core not reachable (no Supervisor, or not started within config.CEC_CORE_WAIT_S)."""
+    """Wait until Home Assistant Core has started (its integrations are loaded), then tell whether its HDMI-CEC
+    integration runs. None: Core not reachable (no Supervisor, or not started within config.CEC_CORE_WAIT_S)."""
     end = time.time() + config.CEC_CORE_WAIT_S
     while True:
         cfg = supervisor.core_config()
@@ -81,9 +81,9 @@ def cec_log():
 
 
 def cec_monitor(dev):
-    """Log the CEC messages the app receives (remote control keys, routing, power) for nerd mode and the support info, and act on
-    them (cec_parse). "cec-ctl -W" gets the messages to the app and the broadcasts (seeing all traffic would need CAP_NET_ADMIN).
-    If it ends later it is started again; if it ends at once, it does not work here."""
+    """Log the CEC messages the app receives (remote control keys, routing, power) for nerd mode and the support info,
+    and act on them (cec_parse). "cec-ctl -W" gets the messages to the app and the broadcasts (seeing all traffic would
+    need CAP_NET_ADMIN). If it ends later it is started again; if it ends at once, it does not work here."""
     args = ["-W", "-w"]
     while True:
         cec_log_add(f"--- {config.CEC_CTL} -d {dev} {' '.join(args)} ---")
@@ -109,9 +109,10 @@ def cec_monitor(dev):
 
 
 def cec_setup(enabled):
-    """Checked once at app start. Option cec off: leave CEC alone (and remove the app's own registration of an earlier start).
-    auto: wait for Home Assistant Core; if its HDMI-CEC integration runs, or another program registered on the port, stay out.
-    Otherwise register as playback device "TV7" on the adapter of the connected HDMI port and read which devices are on the bus."""
+    """Checked once at app start. Option cec off: leave CEC alone (and remove the app's own registration of an earlier
+    start). auto: wait for Home Assistant Core; if its HDMI-CEC integration runs, or another program registered on the
+    port, stay out. Otherwise register as playback device "TV7" on the adapter of the connected HDMI port and read which
+    devices are on the bus."""
     devs = sorted(glob.glob(config.CEC_GLOB))
 
     def read_infos():
@@ -170,7 +171,8 @@ def cec_setup(enabled):
             topology=[],
         )
         config.log_line(
-            f"CEC: {dev} is already used by another program ('{osd}', e.g. Home Assistant's HDMI-CEC integration); the app leaves it alone"
+            f"CEC: {dev} is already used by another program ('{osd}', e.g. Home Assistant's HDMI-CEC integration); "
+            "the app leaves it alone"
         )
         return
     code, out = _cec(dev, "--playback", f"--osd-name={CEC_NAME}")
@@ -213,8 +215,8 @@ CEC_KEYS = {
 KEYS = set(CEC_KEYS.values())
 _cec_rx = {"msg": None}
 
-# key(name): a remote control key; standby(): the TV switched to standby; shown(ours): the TV switched to a source, ours is
-# True for the app's own address; playing(): whether a channel plays (the TV asks who the active source is).
+# key(name): a remote control key; standby(): the TV switched to standby; shown(ours): the TV switched to a source, ours
+# is True for the app's own address; playing(): whether a channel plays (the TV asks who the active source is).
 handlers = {"key": lambda k: None, "standby": lambda: None, "shown": lambda ours: None, "playing": lambda: False}
 
 
@@ -238,15 +240,17 @@ def cec_send(*args):
 
 
 def cec_active_source():
-    """Announce the app as the active source (CEC "One Touch Play"), as a playback device does when it starts playing."""
+    """Announce the app as the active source (CEC "One Touch Play"), as a playback device does when it starts
+    playing."""
     if cec_state.get("state") == "active" and cec_state.get("phys"):
         cec_send(f"--active-source=phys-addr={cec_state['phys']}")
 
 
 def cec_parse(line):
-    """cec-ctl's output of received messages: "Received from <dev> to <dev> (<from> to <to>): <MESSAGE> (0x..)" and indented
-    parameters. Remote control keys (USER_CONTROL_PRESSED, "ui-cmd: <name> (0x..)") go to the TV menu. Answered like a playback
-    device: the power status (the TV asks for it regularly), and the active source when the TV switches to the app's address."""
+    """cec-ctl's output of received messages: "Received from <dev> to <dev> (<from> to <to>): <MESSAGE> (0x..)" and
+    indented parameters. Remote control keys (USER_CONTROL_PRESSED, "ui-cmd: <name> (0x..)") go to the TV menu. Answered
+    like a playback device: the power status (the TV asks for it regularly), and the active source when the TV switches
+    to the app's address."""
     m = re.search(r"Received from .*\((\d+) to (\d+)\): ([A-Z_]+)", line)
     if m:
         _cec_rx["msg"] = m[3]

@@ -30,8 +30,8 @@ def hdmi_ok():
 
 
 def update_deinterlace():
-    """Deinterlace where the current decoder allows it (see deinterlace_possible). "auto" deinterlaces only frames that are
-    interlaced (1080i channels), not the progressive ones (720p50, 1080p); mpv without "auto" gets "yes"."""
+    """Deinterlace where the current decoder allows it (see deinterlace_possible). "auto" deinterlaces only frames that
+    are interlaced (1080i channels), not the progressive ones (720p50, 1080p); mpv without "auto" gets "yes"."""
     try:
         if not hwdec.deinterlace_possible(mpvclient.prop("hwdec-current")):
             mpvclient.mpv("set_property", "deinterlace", False)
@@ -94,12 +94,14 @@ def parse_modetest(text):
 
 
 def parse_planes(text):
-    """`modetest -p`: the planes that show a picture (framebuffer set) with type, alpha, blend mode, zpos, colour encoding/range."""
+    """`modetest -p`: the planes that show a picture (framebuffer set) with type, alpha, blend mode, zpos, colour
+    encoding/range."""
     return [{k: v for k, v in pl.items() if k != "blend_enums"} for pl in parse_planes_all(text) if pl["fb"]]
 
 
 def parse_planes_all(text):
-    """All planes of `modetest -p` (with or without a picture), with their properties and the enum values of the blend mode."""
+    """All planes of `modetest -p` (with or without a picture), with their properties and the enum values of the blend
+    mode."""
     planes, cur, prop_name, enums = [], None, None, {}
     for line in text.splitlines():
         m = re.match(r"^(\d+)\s+(\d+)\s+(\d+)\s+\d+,\d+\s+\d+,\d+", line)
@@ -127,9 +129,9 @@ def parse_planes_all(text):
 
 
 def plane_fixes(text):
-    """modetest -w arguments that make every overlay plane fully opaque with pre-multiplied blending. mpv draws its OSD (and on
-    the H.265 path everything but the video) on an overlay plane and does not set these; a value left behind by another program
-    (seen: alpha 3084 of 65535 and "Coverage") makes the OSD nearly invisible."""
+    """modetest -w arguments that make every overlay plane fully opaque with pre-multiplied blending. mpv draws its OSD
+    (and on the H.265 path everything but the video) on an overlay plane and does not set these; a value left behind by
+    another program (seen: alpha 3084 of 65535 and "Coverage") makes the OSD nearly invisible."""
     out = []
     for pl in parse_planes_all(text):
         if pl.get("type") != "Overlay":
@@ -191,12 +193,13 @@ def drm_modes():
 
 
 VIDEO_PRESETS = {"2160p": (3840, 2160), "1080p": (1920, 1080), "720p": (1280, 720)}
-START_HZ = 50.0  # TV7 and SRG broadcast at 25/50 fps: starting at 50 Hz spares the switch (an mpv restart) on the first channel
+# TV7 and SRG broadcast at 25/50 fps: starting at 50 Hz spares the switch (an mpv restart) on the first channel
+START_HZ = 50.0
 
 
 def start_rate(lst, cands):
-    """Of the modes cands (one size), the one to start with when the refresh rate follows the stream: 50 Hz if offered, otherwise
-    the rate closest to the display's preferred mode."""
+    """Of the modes cands (one size), the one to start with when the refresh rate follows the stream: 50 Hz if offered,
+    otherwise the rate closest to the display's preferred mode."""
     near = [m for m in cands if m["hz"] is not None and abs(m["hz"] - START_HZ) < 1.0]
     if near:
         return near[0]
@@ -206,8 +209,8 @@ def start_rate(lst, cands):
 
 
 def auto_size(lst):
-    """Output size for video_mode=auto: 1080p if the display offers it (the channels are at most 1080p, anything larger only
-    upscales on the device; the display does that as well), otherwise the display's preferred size."""
+    """Output size for video_mode=auto: 1080p if the display offers it (the channels are at most 1080p, anything larger
+    only upscales on the device; the display does that as well), otherwise the display's preferred size."""
     if any((m["w"], m["h"]) == VIDEO_PRESETS["1080p"] and not m["interlaced"] for m in lst):
         return VIDEO_PRESETS["1080p"]
     pref = next((m for m in lst if m["preferred"]), None)
@@ -215,9 +218,9 @@ def auto_size(lst):
 
 
 def resolve_mode(video_mode, port, modes=None):
-    """The mode mpv starts with (--drm-mode) plus a note. 'preferred' / 'highest' pass through; a size is resolved to the mode
-    INDEX of the connector (a "1920x1080@50" spec could match an interlaced mode first), at the start rate (start_rate); the
-    refresh rate then follows the stream (player.match_refresh). The display must offer the size."""
+    """The mode mpv starts with (--drm-mode) plus a note. 'preferred' / 'highest' pass through; a size is resolved to
+    the mode INDEX of the connector (a "1920x1080@50" spec could match an interlaced mode first), at the start rate
+    (start_rate); the refresh rate then follows the stream (player.match_refresh). The display must offer the size."""
     if video_mode in ("", "auto"):  # 1080p if offered (see auto_size)
         modes = drm_modes() if modes is None else modes
         for lst in [modes[port]] if port and port in modes else list(modes.values()):
@@ -254,8 +257,8 @@ def current_drm_mode():
 
 
 def mode_for_fps(fps, video_mode, port, modes=None):
-    """Index of the display mode whose refresh rate equals the stream's frame rate (or a multiple, 25 -> 50, 24 -> 48), at the
-    resolution that video_mode asks for (auto: see auto_size). None if the display offers nothing suitable."""
+    """Index of the display mode whose refresh rate equals the stream's frame rate (or a multiple, 25 -> 50, 24 -> 48),
+    at the resolution that video_mode asks for (auto: see auto_size). None if the display offers nothing suitable."""
     if not fps or fps < 10:
         return None
     modes = drm_modes() if modes is None else modes
@@ -280,9 +283,10 @@ def mode_for_fps(fps, video_mode, port, modes=None):
     return None
 
 
-# vo: gpu|drm; pending: chosen without a connected display (plain DRM for now, chosen again once a display is there); hw: H.265 is
-# decoded in hardware; mode: the drm-mode mpv was started with; override: the output mode that follows the stream's frame rate.
-# Tests and the dev server attach to an mpv started by someone else and set the start values (config.VIDEO_START).
+# vo: gpu|drm; pending: chosen without a connected display (plain DRM for now, chosen again once a display is there);
+# hw: H.265 is decoded in hardware; mode: the drm-mode mpv was started with; override: the output mode that follows the
+# stream's frame rate. Tests and the dev server attach to an mpv started by someone else and set the start values
+# (config.VIDEO_START).
 VIDEO = {
     "vo": None,
     "pending": "no",
@@ -319,8 +323,9 @@ def _read_all(pattern):
 
 
 def hdmi_card(port):
-    """(DRM device, connector name) of the HDMI connector to use: the given port or the first one. On the Raspberry Pi 5, card0 is
-    only the render chip (v3d) and the HDMI output is on card1 (vc4), so mpv's default (card0) would not work."""
+    """(DRM device, connector name) of the HDMI connector to use: the given port or the first one. On the Raspberry Pi
+    5, card0 is only the render chip (v3d) and the HDMI output is on card1 (vc4), so mpv's default (card0) would not
+    work."""
     for c in connectors():
         name = os.path.basename(c)
         card = name.split("-", 1)[0]

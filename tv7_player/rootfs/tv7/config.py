@@ -58,7 +58,8 @@ MODETEST = _env("TV7_MODETEST", "modetest")  # lists the display's modes and the
 CEC_CTL = _env("TV7_CEC_CTL", "cec-ctl")
 CEC_GLOB = _env("TV7_CEC_GLOB", "/dev/cec*")
 OSD_CACHE = _env("TV7_OSD_CACHE", "/tmp/tv7-osd")  # logos converted for mpv's overlay-add
-# the video output when mpv was started by someone else (tests, dev/run-web.sh): e.g. "vo=drm pending=yes hw=no mode=preferred"
+# the video output when mpv was started by someone else (tests, dev/run-web.sh): e.g. "vo=drm pending=yes hw=no
+# mode=preferred"
 VIDEO_START = dict(x.split("=", 1) for x in _env("TV7_VIDEO", "").split() if "=" in x)
 HW_AVAILABLE = _env("TV7_HW_AVAILABLE", "no")  # the same for "H.265 is decoded in hardware"
 
@@ -75,9 +76,9 @@ CEC_CORE_POLL_S = _env("TV7_CEC_CORE_POLL_S", 10.0, float)
 MENU_TIMEOUT_S = _env("TV7_MENU_TIMEOUT_S", 12.0, float)  # the TV menu closes without a key
 DIGIT_S = _env("TV7_DIGIT_S", 1.6, float)  # pause after the last digit before the channel number is taken
 
-# --- Texts ---
-# Texts of the web UI ("ui") and of the TV menu, banner and technical info ("tv") in English, German, French and Italian: one file
-# per language. The option names and descriptions are in translations/<lang>.yaml (Home Assistant's format for the configuration page).
+# --- Texts --- Texts of the web UI ("ui") and of the TV menu, banner and technical info ("tv") in English, German,
+# French and Italian: one file per language. The option names and descriptions are in translations/<lang>.yaml (Home
+# Assistant's format for the configuration page).
 I18N_DIR = os.path.join(ROOT, "i18n")
 I18N = {lg: json.load(open(os.path.join(I18N_DIR, f"{lg}.json"), encoding="utf-8")) for lg in ("en", "de", "fr", "it")}
 TV_LABELS = {lg: d["tv"] for lg, d in I18N.items()}
@@ -85,8 +86,9 @@ UI_TEXTS = json.dumps({lg: d["ui"] for lg, d in I18N.items()}, ensure_ascii=Fals
 
 
 def app_version():
-    """The app version. The web UI reloads itself when it changes; with TV7_DEV_RELOAD the modification time of the UI files,
-    the texts and the program is appended, so the open page reloads after every edit (live reload during development)."""
+    """The app version. The web UI reloads itself when it changes; with TV7_DEV_RELOAD the modification time of the UI
+    files, the texts and the program is appended, so the open page reloads after every edit (live reload during
+    development)."""
     if not DEV_RELOAD:
         return VERSION
     stamp = 0

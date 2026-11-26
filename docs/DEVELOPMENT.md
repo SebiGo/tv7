@@ -11,7 +11,7 @@ Open the folder in VS Code and run **Dev Containers: Reopen in Container**. Two 
 ```
 dev/run-web.sh                       # web UI + API against a fake mpv: http://localhost:8099 (forwarded), live reload
 cd tv7_player && python3 -m pytest          # all tests, offline (about 2 minutes); -k <name> runs a part, --live the real Init7 list
-ruff check . && ruff format --check .        # Python lint and format (ruff.toml); `ruff format .` formats
+ruff check . && ruff format --check .        # Python lint and format (ruff.toml, 120 columns, also comments); `ruff format .` formats
 yamllint -c .yamllint tv7_player .github repository.yaml   # YAML lint
 shellcheck tv7_player/rootfs/*.sh tv7_player/pi-debs.sh dev/*.sh
 ```

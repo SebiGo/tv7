@@ -1,5 +1,5 @@
-"""Drawing on the TV with mpv's OSD: an ASS overlay in 1920x1080 coordinates (mpv scales it to the output) for panels, text
-and selections, and overlay-add images for the logos. Also the language of the TV texts and the logo cache."""
+"""Drawing on the TV with mpv's OSD: an ASS overlay in 1920x1080 coordinates (mpv scales it to the output) for panels,
+text and selections, and overlay-add images for the logos. Also the language of the TV texts and the logo cache."""
 
 import hashlib
 import os
@@ -62,13 +62,16 @@ def rounded_rect(x, y, w, h, r):
     x, y, w, h, r = (round(v) for v in (x, y, w, h, r))
     return (
         f"m {x + r} {y} l {x + w - r} {y} b {x + w - k} {y} {x + w} {y + k} {x + w} {y + r} l {x + w} {y + h - r} "
-        f"b {x + w} {y + h - k} {x + w - k} {y + h} {x + w - r} {y + h} l {x + r} {y + h} b {x + k} {y + h} {x} {y + h - k} {x} {y + h - r} "
+        f"b {x + w} {y + h - k} {x + w - k} {y + h} {x + w - r} {y + h} l {x + r} {y + h} "
+        f"b {x + k} {y + h} {x} {y + h - k} {x} {y + h - r} "
         f"l {x} {y + r} b {x} {y + k} {x + k} {y} {x + r} {y}"
     )
 
 
 def text(x, y, txt, size, a, f, an=4, bold=False, color=WHITE, extra=""):
-    return rf"{{\an{an}\pos({round(x)},{round(y)})\fn{FONT}\fs{size}\b{1 if bold else 0}\bord0\shad0\1c{color}\1a{alpha(a, f)}{extra}}}{ass_escape(txt)}"
+    """ASS text at x, y (alignment an) in FONT; a: transparency, f: fade-in fraction (see alpha)."""
+    tags = rf"\an{an}\pos({round(x)},{round(y)})\fn{FONT}\fs{size}\b{1 if bold else 0}\bord0\shad0"
+    return rf"{{{tags}\1c{color}\1a{alpha(a, f)}{extra}}}{ass_escape(txt)}"
 
 
 def clip(txt, n):
@@ -80,8 +83,8 @@ def shape(path, color, a, extra=""):
 
 
 def panel_bg(x, y, w, h, r):
-    """Panel like the web UI's dark cards: diagonal gradient, a coral glow in the top right corner, translucent, with a soft
-    shadow and a faint light edge. Drawn as its own overlay (rendered once when it appears)."""
+    """Panel like the web UI's dark cards: diagonal gradient, a coral glow in the top right corner, translucent, with a
+    soft shadow and a faint light edge. Drawn as its own overlay (rendered once when it appears)."""
     box = rounded_rect(x, y, w, h, r)
     clip_box = rf"\clip({box})"
     return [
@@ -106,7 +109,7 @@ def pill(x, y, w, h, r, glow=True):
 
 
 def logo_bgra(url):
-    """Logo converted for overlay-add, or None while it is being converted / if it cannot be used (JPEG, unusual PNG)."""
+    """Logo converted for overlay-add; None while it is converted or if it cannot be used (JPEG, unusual PNG)."""
     if not url:
         return None
     v = _logo_bgra.get(url)
@@ -142,7 +145,8 @@ def _convert_logo(url):
 
 
 def place_logos(slots, placements):
-    """Show logos (url, x, y, w, h in 1920x1080 coordinates, fitted into that box) in the given overlay-add slots; clear the rest."""
+    """Show logos (url, x, y, w, h in 1920x1080 coordinates, fitted into that box) in the given overlay-add slots; clear
+    the rest."""
     ow, oh = mpvclient.prop("osd-width"), mpvclient.prop("osd-height")
     want = {}
     if ow and oh:

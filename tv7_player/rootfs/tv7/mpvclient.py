@@ -1,4 +1,5 @@
-"""Talking to mpv over its IPC socket: commands and properties (one connection that stays open), the log and change notifications (a second connection), the tracks of the running stream."""
+"""Talking to mpv over its IPC socket: commands and properties (one connection that stays open), the log and change
+notifications (a second connection), the tracks of the running stream."""
 
 import json
 import socket
@@ -11,8 +12,9 @@ _ovl_conn_lock = threading.Lock()
 
 
 def mpv_keep(cmd):
-    """An mpv command over the one connection that stays open (mpv starts a thread per connection, and it removes the OSD overlays
-    of a client when its connection closes). Reconnects after an mpv restart. The log reader has its own connection."""
+    """An mpv command over the one connection that stays open (mpv starts a thread per connection, and it removes the
+    OSD overlays of a client when its connection closes). Reconnects after an mpv restart. The log reader has its own
+    connection."""
     with _ovl_conn_lock:
         for attempt in (1, 2):
             c = _ovl_conn
@@ -106,8 +108,9 @@ def wait_change(seen, timeout):
 
 
 def _log_reader():
-    """Keep an IPC connection to mpv open: it collects mpv's log messages (request_log_messages) and is told about changes of the
-    properties the web UI shows (observe_property), which wake up /events. Reconnects when mpv restarts."""
+    """Keep an IPC connection to mpv open: it collects mpv's log messages (request_log_messages) and is told about
+    changes of the properties the web UI shows (observe_property), which wake up /events. Reconnects when mpv
+    restarts."""
     while True:
         try:
             s = socket.socket(socket.AF_UNIX)

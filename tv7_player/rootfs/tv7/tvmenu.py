@@ -1,8 +1,8 @@
 """The TV menu, the channel banner and the remote control keys (CEC or /key), drawn with tv7/tvdraw.py.
 
-Menu: OK opens it; up/down move, left/right switch tabs (channels, audio, subtitles, settings), OK selects, back closes; it
-closes by itself after config.MENU_TIMEOUT_S. Without the menu: channel up/down zap, digits choose a channel number, info toggles
-the technical info. Every channel start shows a banner."""
+Menu: OK opens it; up/down move, left/right switch tabs (channels, audio, subtitles, settings), OK selects, back closes;
+it closes by itself after config.MENU_TIMEOUT_S. Without the menu: channel up/down zap, digits choose a channel number,
+info toggles the technical info. Every channel start shows a banner."""
 
 import socket
 import threading
@@ -63,7 +63,8 @@ _menu_lock = threading.RLock()
 
 
 def menu_items(tab):
-    """Entries of a tab: {"kind": "header"|"item", "label", "right", "logo", "mark" (current/selected), "act": (action, arg)}."""
+    """Entries of a tab: {"kind": "header"|"item", "label", "right", "logo", "mark" (current/selected), "act": (action,
+    arg)}."""
     L = tvdraw.labels()
     if TABS[tab] == "channels":
         try:
@@ -371,6 +372,10 @@ def _setting_next(spec, val):
     return ok[(i + 1) % len(ok)]
 
 
+def _setting_name(key):
+    return settings.labels(tvdraw.lang()).get(key, {}).get("name", key)
+
+
 def _setting_label(spec, val):
     L = tvdraw.labels()
     if spec["type"] == "bool":
@@ -381,8 +386,8 @@ def _setting_label(spec, val):
 
 
 def _keep_selection(tab, act, row):
-    """After the list of a tab changed (nerd mode shows more settings, a restart entry appears): select the same entry again and
-    keep it on the same row of the screen, so the menu does not jump."""
+    """After the list of a tab changed (nerd mode shows more settings, a restart entry appears): select the same entry
+    again and keep it on the same row of the screen, so the menu does not jump."""
     items = menu_items(tab)
     idx = next((i for i, it in enumerate(items) if it.get("act") == act), None)
     if idx is None:
@@ -418,7 +423,7 @@ def menu_activate():
         try:
             settings.save_settings({arg: new})
             menu.update(
-                msg=f"{L['saved']}: {settings.labels(tvdraw.lang()).get(arg, {}).get('name', arg)} = {_setting_label(spec, new)}",
+                msg=f"{L['saved']}: {_setting_name(arg)} = {_setting_label(spec, new)}",
                 msg_t=time.time(),
             )
         except Exception as e:
@@ -574,7 +579,8 @@ def handle_key(key):
 
 
 def menu_tick():
-    """Called about once a second: close the menu after config.MENU_TIMEOUT_S without a key, hide the banner when its time is up."""
+    """Called about once a second: close the menu after config.MENU_TIMEOUT_S without a key, hide the banner when its
+    time is up."""
     with _menu_lock:
         now = time.time()
         if menu["open"] and now - menu["t"] >= config.MENU_TIMEOUT_S:

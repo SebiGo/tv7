@@ -1,5 +1,5 @@
-"""The fake world the tests run in: Init7 channel list and logos, the Supervisor, HDMI sysfs, modetest and mpv (mock_mpv.py),
-plus App, which starts control.py against them.
+"""The fake world the tests run in: Init7 channel list and logos, the Supervisor, HDMI sysfs, modetest and mpv
+(mock_mpv.py), plus App, which starts control.py against them.
 
 Nothing here touches hardware or the network (except the real Init7 channel list with pytest --live).
 """
@@ -94,8 +94,8 @@ def _reply(h, code, body, ctype=None):
 
 class World:
     """One fake environment for the whole test session. `state` is what the fake mpv saw and does (see mock_mpv.py, plus
-    "scenario": ok | never | multicast_fails | needs_hdmi, and "cable": whether a display answers HDMI detection), `sup` what
-    the fake Supervisor received."""
+    "scenario": ok | never | multicast_fails | needs_hdmi, and "cable": whether a display answers HDMI detection), `sup`
+    what the fake Supervisor received."""
 
     def __init__(self, live=False):
         self.live = live
@@ -330,7 +330,8 @@ class App:
             return e.code, json.load(e)
 
     def events(self, n, during=None, ui=False):
-        """Read n status messages from /events; during() runs after the first one. Returns ([(status, time)], content type)."""
+        """Read n status messages from /events; during() runs after the first one. Returns ([(status, time)], content
+        type)."""
         resp = urllib.request.urlopen(self.url("/events", ui), timeout=10)
         out, t0 = [], time.time()
         while len(out) < n and time.time() - t0 < 8:

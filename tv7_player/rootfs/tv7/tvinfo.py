@@ -96,7 +96,8 @@ def osd_box_height(n_rows):
 
 
 def osd_ass(lines):
-    """ASS text of the technical info box: channel as title with an accent bar, then label (grey) and value (white) per row."""
+    """ASS text of the technical info box: channel as title with an accent bar, then label (grey) and value (white) per
+    row."""
     head = next((v for lab, v in lines if lab is None), "")
     rows = [(lab, v) for lab, v in lines if lab is not None]
     out = [
@@ -111,8 +112,8 @@ def osd_ass(lines):
 
 
 def osd_step():
-    """Show or refresh the technical info while it is on and a channel plays; remove it otherwise. The box behind it is its own
-    overlay and is drawn again only when the number of rows changes."""
+    """Show or refresh the technical info while it is on and a channel plays; remove it otherwise. The box behind it is
+    its own overlay and is drawn again only when the number of rows changes."""
     want = osd_state["on"] and mpvclient.playing()
     if want:
         lines = osd_lines(osd_state["lang"] or tvdraw.lang())

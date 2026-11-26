@@ -4,21 +4,24 @@ import re
 
 
 def deinterlace_possible(hwdec):
-    """Software frames (no, *-copy) and VAAPI frames (mpv deinterlaces them with vavpp) can be deinterlaced. Frames that go straight
-    to a display plane (drm on the Raspberry Pi) cannot: a deinterlace filter would turn hardware decoding off."""
+    """Software frames (no, *-copy) and VAAPI frames (mpv deinterlaces them with vavpp) can be deinterlaced. Frames that
+    go straight to a display plane (drm on the Raspberry Pi) cannot: a deinterlace filter would turn hardware decoding
+    off."""
     hwdec = hwdec or "no"
     return hwdec == "no" or hwdec.endswith("-copy") or hwdec.startswith("vaapi")
 
 
 def pick_hwdec(vo, hwdec_help, v4l2_names, arch, render_node):
-    """mpv arguments for the video output and the hardware decoding of this device. Returns (arguments, H.265 in hardware, log text).
-    - Raspberry Pi 5 and 4, H.265: rpi-hevc-dec (V4L2 stateless, --hwdec=drm). These frames go straight to the display's bottom
-      ("primary") plane; the GPU draws everything else (software-decoded channels, menu, technical info, idle logo) on the overlay
-      plane above, which fix_planes makes opaque before mpv starts. Measured on the Pi 5: about 0.15 of 4 cores instead of 3.
-    - Raspberry Pi 4, H.264: bcm2835-codec (V4L2 stateful, --hwdec=v4l2m2m-copy); "copy" hands the frames back to normal memory, so
-      software deinterlacing keeps working. Not tested on a Pi 4.
-    - x86 with Intel or AMD graphics: VAAPI for H.264 and H.265, deinterlaced in hardware (vavpp); without the GPU output the frames
-      are copied (vaapi-copy). Not tested on a device."""
+    """mpv arguments for the video output and the hardware decoding of this device. Returns (arguments, H.265 in
+    hardware, log text).
+    - Raspberry Pi 5 and 4, H.265: rpi-hevc-dec (V4L2 stateless, --hwdec=drm). These frames go straight to the display's
+      bottom ("primary") plane; the GPU draws everything else (software-decoded channels, menu, technical info, idle
+      logo) on the overlay plane above, which fix_planes makes opaque before mpv starts. Measured on the Pi 5: about
+      0.15 of 4 cores instead of 3.
+    - Raspberry Pi 4, H.264: bcm2835-codec (V4L2 stateful, --hwdec=v4l2m2m-copy); "copy" hands the frames back to normal
+      memory, so software deinterlacing keeps working. Not tested on a Pi 4.
+    - x86 with Intel or AMD graphics: VAAPI for H.264 and H.265, deinterlaced in hardware (vavpp); without the GPU
+      output the frames are copied (vaapi-copy). Not tested on a device."""
 
     def has(name):
         return re.search(rf"^ *{re.escape(name)}( |$)", hwdec_help or "", re.M) is not None

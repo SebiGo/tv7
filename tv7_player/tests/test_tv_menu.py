@@ -1,5 +1,6 @@
-"""The TV overlays: technical info (/osd), menu, channel banner and remote keys (/key). The menu runs on its own instance
-because its nerd mode stays switched on for that process. OSD overlay ids: 7 info, 8 menu, 9 banner, 10 menu background."""
+"""The TV overlays: technical info (/osd), menu, channel banner and remote keys (/key). The menu runs on its own
+instance because its nerd mode stays switched on for that process. OSD overlay ids: 7 info, 8 menu, 9 banner, 10 menu
+background."""
 
 import re
 import time
