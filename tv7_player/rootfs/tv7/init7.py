@@ -39,6 +39,12 @@ _sync = {
 }
 
 
+def sync_info():
+    """The channel lists for the support text: channel counts (srg None when the list is off) and the last sync."""
+    srg = len(_cache["srg"]) if SRG_FHD else None
+    return {"tv7": sum(1 for c in _cache["data"] if c.get("list") == "tv7"), "srg": srg, **_sync}
+
+
 def logo_file(url):
     """Channel logo (PNG/JPEG) from Init7: only URLs under LOGO_PREFIXES, cached on disk. Returns (bytes, content type)."""
     if (

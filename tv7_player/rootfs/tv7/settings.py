@@ -7,7 +7,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from tv7 import cec, config, display, mpvclient
+from tv7 import cec, config, display, mpvclient, supervisor
 
 
 def _c(*v):
@@ -145,6 +145,11 @@ def current_values():
     return {k: o.get(k, DEFAULTS[k]) for k in BY_KEY}
 
 
+def applied_value(key):
+    """The value the running process uses (a restart-only setting keeps its value from the start)."""
+    return _applied.get(key, current_values()[key])
+
+
 def pending_restart(values=None):
     values = values or current_values()
     return [k for k, spec in BY_KEY.items() if spec["restart"] and k in _applied and _applied[k] != values.get(k)]
@@ -155,7 +160,7 @@ def apply_live(key, val):
     try:
         if key == "deinterlace":
             _applied[key] = val
-            display.update_deinterlace()
+            display.update_deinterlace(val)
         elif key == "audio_language":
             mpvclient.mpv("set_property", "alang", "" if val == "auto" else f"{val},eng")
         elif key == "audio_channels":
@@ -233,7 +238,7 @@ def settings_view(lang="en"):
         "values": cur,
         "labels": labels(lang),
         "pending_restart": pending_restart(cur),
-        "can_save": bool(config.SUPERVISOR_TOKEN),
+        "can_save": supervisor.available(),
         "defaults": DEFAULTS,
         "version": config.app_version(),
     }
@@ -259,17 +264,6 @@ def validate_setting(key, val):
     return val
 
 
-def supervisor_call(path, payload=None):
-    req = urllib.request.Request(
-        config.SUPERVISOR + path,
-        data=json.dumps(payload or {}).encode(),
-        method="POST",
-        headers={"Authorization": f"Bearer {config.SUPERVISOR_TOKEN}", "Content-Type": "application/json"},
-    )
-    with urllib.request.urlopen(req, timeout=20) as r:
-        return json.load(r)
-
-
 OBSOLETE_OPTIONS = ("subtitles", "listen", "api_port", "api_token")
 
 
@@ -277,13 +271,13 @@ def save_settings(values):
     """Validate, store as the app's options through the Supervisor, apply what can be applied now."""
     for k, v in values.items():
         validate_setting(k, v)
-    if not config.SUPERVISOR_TOKEN:
+    if not supervisor.available():
         raise RuntimeError("saving needs the Supervisor API (hassio_api); not available here")
     merged = {**read_options(), **values}  # keeps the options not shown in the web UI
     for k in OBSOLETE_OPTIONS:  # options of older versions the schema no longer has
         merged.pop(k, None)
     try:
-        supervisor_call("/addons/self/options", {"options": merged})
+        supervisor.post("/addons/self/options", {"options": merged})
     except urllib.error.HTTPError as e:
         try:
             msg = json.load(e).get("message", str(e))

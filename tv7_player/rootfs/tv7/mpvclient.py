@@ -6,8 +6,6 @@ import socket
 import threading
 import time
 
-from tv7 import tvosd
-
 SOCK = ""
 _ovl_conn = {"sock": None, "buf": b"", "id": 0}
 _ovl_conn_lock = threading.Lock()
@@ -80,6 +78,8 @@ _log_thread = {"started": False}
 # What the web UI shows changed: mpv reported a change, or the app started/stopped something. /events waits for this.
 _changed = threading.Condition()
 _version = {"n": 0}
+# Called (in a thread of its own) when playback ends (mpv goes idle); control.py adds the TV overlay's update.
+on_idle = []
 OBSERVED = (
     "idle-active",
     "media-title",
@@ -97,6 +97,13 @@ def changed():
     with _changed:
         _version["n"] += 1
         _changed.notify_all()
+
+
+def wait_change(seen, timeout):
+    """Wait until something changed after version seen (or timeout); returns the current version."""
+    with _changed:
+        _changed.wait_for(lambda: _version["n"] != seen, timeout=timeout)
+        return _version["n"]
 
 
 def _log_reader():
@@ -125,10 +132,9 @@ def _log_reader():
                         continue
                     if ev.get("event") == "property-change":
                         changed()
-                        if ev.get("name") == "idle-active" and ev.get("data") is True and tvosd.osd_state["shown"]:
-                            threading.Thread(
-                                target=tvosd.osd_step, daemon=True
-                            ).start()  # playback ended: the info goes at once
+                        if ev.get("name") == "idle-active" and ev.get("data") is True:
+                            for fn in on_idle:
+                                threading.Thread(target=fn, daemon=True).start()
                     elif ev.get("event") == "log-message":
                         text = f"[{ev.get('prefix', '')}] {ev.get('level', '')}: {str(ev.get('text', '')).rstrip()}"
                         with _log_lock:

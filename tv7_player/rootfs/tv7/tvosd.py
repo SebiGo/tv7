@@ -6,7 +6,7 @@ import socket
 import threading
 import time
 
-from tv7 import cec, config, display, init7, mpvclient, player, settings, system
+from tv7 import cec, config, display, init7, mpvclient, player, settings, supervisor, system
 
 OSD_S = float(os.environ.get("TV7_OSD_S", "1"))  # refresh interval of the overlay
 OSD_ID = 7  # overlay id (osd-overlay); the idle logo uses overlay-add, separate
@@ -78,7 +78,7 @@ def osd_lines(lang="en"):
         sysl.get("mpv") is not None and f"mpv {sysl['mpv']:.0f}%",
         sysl.get("temp_c") is not None and f"{sysl['temp_c']:.0f} °C",
     )
-    head = join(player.current["name"], player.current["source"])
+    head = join(player.state.current["name"], player.state.current["source"])
     return [(None, head)] + [
         (L[k], v)
         for k, v in (
@@ -228,12 +228,12 @@ def menu_lang():
 def ha_language_loop():
     """Language of the TV menu: Home Assistant's language (the TV has no browser that could tell)."""
     for _ in range(40):
-        cfg = cec.ha_core_config()
+        cfg = supervisor.core_config()
         lang = str((cfg or {}).get("language") or "")[:2].lower()
         if lang:
             _ha_lang["lang"] = lang if lang in config.TV_LABELS else "en"
             return
-        if not config.SUPERVISOR_TOKEN:
+        if not supervisor.available():
             return
         time.sleep(15)
 
@@ -386,7 +386,7 @@ def menu_items(tab):
                         "label": c["name"],
                         "right": str(c.get("ordernum") or "") if menu["nerd"] else "",
                         "logo": c.get("logo"),
-                        "mark": c["pk"] == player.current["pk"],
+                        "mark": c["pk"] == player.state.current["pk"],
                         "act": ("play", c["pk"]),
                     }
                     for c in lst
@@ -435,7 +435,7 @@ def menu_items(tab):
                     "act": None if locked else ("set", k),
                 }
             )
-    if pend and config.SUPERVISOR_TOKEN:
+    if pend and supervisor.available():
         out.append({"kind": "item", "label": L["restart"], "mark": True, "act": ("restart", None)})
     out.append({"kind": "item", "label": L["stop"], "act": ("stop", None)})
     out += [
@@ -556,7 +556,7 @@ def render_banner(logos=True):
             x
             for x in (
                 number,
-                player.current["source"] if st == "ok" and player.current["source"] else "",
+                player.state.current["source"] if st == "ok" and player.state.current["source"] else "",
                 L["starting"]
                 if st == "starting"
                 else L["failed"]
@@ -728,9 +728,7 @@ def menu_activate():
         render_menu()
     elif act == "restart":
         close_menu()
-        threading.Thread(
-            target=lambda: (time.sleep(0.5), settings.supervisor_call("/addons/self/restart")), daemon=True
-        ).start()
+        supervisor.restart_app()
     elif act == "stop":
         close_menu()
         player.stop_playback(wait=False)
@@ -772,15 +770,7 @@ def play_async(ch, source="auto"):
     show_banner(ch, "starting", seconds=120)
 
     def run():
-        t0 = time.time()
-        player.hdmi_stopped.clear()
-        player.autostopped.clear()
-        try:
-            res = player.start(ch, source)
-        except Exception as e:
-            res = {"ok": False, "log": [str(e)]}
-        player.last_start.clear()
-        player.last_start.update(t=t0, seconds=round(time.time() - t0, 1), requested=source, **res)
+        res = player.play(ch, source)
         with _menu_lock:
             if banner["ch"] is ch:
                 show_banner(ch, "ok" if res["ok"] else "failed")
@@ -788,12 +778,24 @@ def play_async(ch, source="auto"):
     player.player(run, wait=False)
 
 
+def resume(ch, source):
+    """Start a channel again after the TV showed another source (player.handlers["resume"]), with the channel banner."""
+    with _menu_lock:
+        play_async(ch, source)
+
+
+def playback_ended():
+    """mpv went idle (mpvclient.on_idle): the technical info goes at once instead of at its next refresh."""
+    if osd_state["shown"]:
+        osd_step()
+
+
 def zap(d):
     try:
         chs = init7.channels()
     except Exception:
         return
-    cur = next((c for c in chs if c["pk"] == player.current["pk"]), None)
+    cur = next((c for c in chs if c["pk"] == player.state.current["pk"]), None)
     lst = cur.get("list", "tv7") if cur else "tv7"
     pool = [c for c in chs if c.get("list", "tv7") == lst]
     if not pool:
@@ -867,9 +869,11 @@ def handle_key(key):
             set_osd(not osd_state["on"], menu_lang())
         elif key == "stop":
             player.stop_playback(wait=False)
-        elif key == "play" and not player.current["pk"] and player.last_played:
+        elif key == "play" and not player.state.current["pk"] and player.state.last_played:
             try:
-                play_async(init7.find_channel(player.last_played["pk"]), player.last_played.get("source") or "auto")
+                play_async(
+                    init7.find_channel(player.state.last_played["pk"]), player.state.last_played.get("source") or "auto"
+                )
             except KeyError:
                 pass
         elif key == "back":

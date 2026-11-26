@@ -1,17 +1,16 @@
-"""HDMI-CEC: whether the port is free, registration as "TV7", the received messages (remote control keys, standby, source switches) and the answers to the TV."""
+"""HDMI-CEC: whether the port is free, registration as "TV7", the received messages and the answers to the TV.
+
+What the TV tells goes to `handlers` (set at start in control.py): remote control keys, standby, and which physical address
+the TV shows. This module only talks to the bus; what playback does about it is in tv7/player.py."""
 
 import glob
-import json
 import os
 import re
 import subprocess
 import threading
 import time
-import urllib.error
-import urllib.parse
-import urllib.request
 
-from tv7 import config, init7, player, settings, tvosd
+from tv7 import config, supervisor
 
 CEC_CTL = os.environ.get("TV7_CEC_CTL", "cec-ctl")
 CEC_GLOB = os.environ.get("TV7_CEC_GLOB", "/dev/cec*")
@@ -23,29 +22,15 @@ cec_state = {"state": "off", "device": None, "detail": None, "devices": [], "top
 CEC_LOCKED = ("ha_integration", "in_use")  # states in which the web UI greys out the option
 
 
-def ha_core_config():
-    """Home Assistant Core's /api/config through the Supervisor (state, loaded integrations); None if not reachable."""
-    if not config.SUPERVISOR_TOKEN:
-        return None
-    try:
-        req = urllib.request.Request(
-            config.SUPERVISOR + "/core/api/config", headers={"Authorization": f"Bearer {config.SUPERVISOR_TOKEN}"}
-        )
-        with urllib.request.urlopen(req, timeout=10) as r:
-            return json.load(r)
-    except Exception:
-        return None
-
-
 def ha_cec_integration():
     """Wait until Home Assistant Core has started (its integrations are loaded), then tell whether its HDMI-CEC integration
     runs. None: Core not reachable (no Supervisor, or not started within CEC_CORE_WAIT_S)."""
     end = time.time() + CEC_CORE_WAIT_S
     while True:
-        cfg = ha_core_config()
+        cfg = supervisor.core_config()
         if cfg and str(cfg.get("state", "RUNNING")).upper() == "RUNNING":
             return "hdmi_cec" in (cfg.get("components") or [])
-        if not config.SUPERVISOR_TOKEN or time.time() >= end:
+        if not supervisor.available() or time.time() >= end:
             return None
         time.sleep(CEC_CORE_POLL_S)
 
@@ -234,6 +219,10 @@ CEC_KEYS = {
 KEYS = set(CEC_KEYS.values())
 _cec_rx = {"msg": None}
 
+# key(name): a remote control key; standby(): the TV switched to standby; shown(ours): the TV switched to a source, ours is
+# True for the app's own address; playing(): whether a channel plays (the TV asks who the active source is).
+handlers = {"key": lambda k: None, "standby": lambda: None, "shown": lambda ours: None, "playing": lambda: False}
+
 
 def cec_send(*args):
     """Send a CEC message with cec-ctl (in the background; the answer is logged with the CEC messages)."""
@@ -254,57 +243,6 @@ def cec_send(*args):
     threading.Thread(target=run, daemon=True).start()
 
 
-CEC_AWAY_S = float(os.environ.get("TV7_CEC_AWAY_S", "30"))  # the TV shows another source this long: stop
-cec_away = {"since": None}  # TV switched to another source at this time (None: TV7 shown)
-cec_resume = {}  # channel stopped because of CEC, to start again when TV7 is shown
-
-
-def cec_tv_gone(reason):
-    """The TV switched to standby (at once) or to another source (after CEC_AWAY_S): stop like for a missing display
-    (option hdmi_disconnect: resume = start again when the TV shows TV7 again, stop = only stop, keep = keep playing)."""
-    player.player(_cec_tv_gone, reason)
-
-
-def _cec_tv_gone(reason):
-    mode = settings.current_values().get("hdmi_disconnect", "resume")
-    if mode == "keep" or not player.current["pk"]:
-        return
-    cec_resume.clear()
-    if mode == "resume":
-        cec_resume.update(pk=player.current["pk"], source=player.current["source"])
-    cec_away["since"] = None
-    player.auto_stop(
-        "cec",
-        f"HDMI-CEC: {reason}: playback of {player.current['name']} stopped"
-        + (", it resumes when the TV shows TV7 again" if mode == "resume" else ""),
-    )
-
-
-def cec_shown(addr):
-    """The TV switched to a physical address: TV7 or another source."""
-    if cec_state.get("phys") and addr == cec_state["phys"]:
-        cec_away["since"] = None
-        if cec_resume and not player.current["pk"]:
-            ch = dict(cec_resume)
-            cec_resume.clear()
-            try:
-                config.log_line("HDMI-CEC: the TV shows TV7 again, playback resumes")
-                with tvosd._menu_lock:
-                    tvosd.play_async(
-                        init7.find_channel(ch["pk"]), ch["source"] if ch["source"] in ("multicast", "hls") else "auto"
-                    )
-            except Exception as e:
-                config.log_line(f"HDMI-CEC: resume failed: {e}")
-    elif player.current["pk"] and cec_away["since"] is None:
-        cec_away["since"] = time.time()
-
-
-def cec_away_step():
-    """Called by the watcher: the TV has shown another source for CEC_AWAY_S."""
-    if cec_away["since"] is not None and time.time() - cec_away["since"] >= CEC_AWAY_S:
-        cec_tv_gone("the TV shows another source")
-
-
 def cec_active_source():
     """Announce the app as the active source (CEC "One Touch Play"), as a playback device does when it starts playing."""
     if cec_state.get("state") == "active" and cec_state.get("phys"):
@@ -321,8 +259,8 @@ def cec_parse(line):
         if m[3] == "GIVE_DEVICE_POWER_STATUS":
             cec_send(f"--to={m[1]}", "--report-power-status=pwr-state=on")
         elif m[3] == "STANDBY" and m[1] == "0":  # from the TV (to all or to the app)
-            cec_tv_gone("the TV switched to standby")
-        elif m[3] == "REQUEST_ACTIVE_SOURCE" and player.current["pk"]:  # asked who plays: the app, if a channel runs
+            handlers["standby"]()
+        elif m[3] == "REQUEST_ACTIVE_SOURCE" and handlers["playing"]():  # asked who plays: the app, if a channel runs
             cec_active_source()
         return
     if _cec_rx["msg"] in ("SET_STREAM_PATH", "ACTIVE_SOURCE", "ROUTING_CHANGE"):
@@ -331,7 +269,7 @@ def cec_parse(line):
             msg, _cec_rx["msg"] = _cec_rx["msg"], None
             if msg == "SET_STREAM_PATH" and cec_state.get("phys") and pm[1] == cec_state["phys"]:
                 cec_send(f"--active-source=phys-addr={pm[1]}")
-            cec_shown(pm[1])
+            handlers["shown"](bool(cec_state.get("phys")) and pm[1] == cec_state["phys"])
         return
     m = re.search(r"ui-cmd:.*\((0x[0-9a-fA-F]+)\)", line)
     if m and _cec_rx["msg"] == "USER_CONTROL_PRESSED":
@@ -339,6 +277,6 @@ def cec_parse(line):
         key = CEC_KEYS.get(int(m[1], 16))
         if key:
             try:
-                tvosd.handle_key(key)
+                handlers["key"](key)
             except Exception as e:
                 config.log_line(f"Remote control key {key}: {e}")

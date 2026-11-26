@@ -5,11 +5,8 @@ import json
 import os
 import re
 import time
-import urllib.error
-import urllib.parse
-import urllib.request
 
-from tv7 import config, display, init7, player, settings, system
+from tv7 import config, display, init7, player, settings, supervisor, system
 
 MASK = "****"
 _SECRET_RE = re.compile(
@@ -44,53 +41,18 @@ def redact(text):
     return _IPV6_MAC_RE.sub(MASK, text)
 
 
-def supervisor_info():
-    """Versions of Home Assistant OS, Core and Supervisor plus machine type (empty outside Home Assistant)."""
-    if not config.SUPERVISOR_TOKEN:
-        return {}
-    try:
-        req = urllib.request.Request(
-            config.SUPERVISOR + "/info", headers={"Authorization": f"Bearer {config.SUPERVISOR_TOKEN}"}
-        )
-        with urllib.request.urlopen(req, timeout=5) as r:
-            d = json.load(r).get("data", {})
-        return {k: d.get(k) for k in ("hassos", "homeassistant", "supervisor", "machine", "arch", "operating_system")}
-    except Exception:
-        return {}
-
-
 APP_LOG_LINES = int(os.environ.get("TV7_APP_LOG_LINES", "120"))
-
-
-def app_log():
-    """The last lines of this app's own log (the start of mpv, its warnings; with debug on its detailed log) from the Supervisor."""
-    if not config.SUPERVISOR_TOKEN:
-        return []
-    try:
-        req = urllib.request.Request(
-            config.SUPERVISOR + "/addons/self/logs",
-            headers={
-                "Authorization": f"Bearer {config.SUPERVISOR_TOKEN}",
-                "Accept": "text/plain",
-                "Range": f"entries=:-{APP_LOG_LINES}:",
-            },
-        )
-        with urllib.request.urlopen(req, timeout=8) as r:
-            text = r.read(400000).decode("utf-8", "replace")
-        text = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", text)  # colour codes
-        return text.splitlines()[-APP_LOG_LINES:]
-    except Exception:
-        return []
 
 
 def support_text():
     """Everything a bug report needs, as Markdown that fits the repository's issue template; secrets masked."""
     if system.system_load().get("total") is None:  # CPU load needs two samples
         time.sleep(0.6)
-    n, env, sup, alog = system.nerd(), system.environment(), supervisor_info(), app_log()
+    n, env, sup, alog = system.nerd(), system.environment(), supervisor.info(), supervisor.app_log(APP_LOG_LINES)
+    sync = init7.sync_info()
     v, f, a, o, sy = n["video"], n["frames"], n["audio"], n["output"], n["system"]
     model = (
-        system._read("/proc/device-tree/model") or system._read("/sys/firmware/devicetree/base/model") or ""
+        system.read_text("/proc/device-tree/model") or system.read_text("/sys/firmware/devicetree/base/model") or ""
     ).replace("\x00", "") or None
     opts = env.get("options", {})
 
@@ -213,39 +175,41 @@ def support_text():
         "",
         table(
             [
-                ("When", ts(player.last_start.get("t"))),
-                ("Channel", player.last_start.get("channel")),
-                ("Requested source", player.last_start.get("requested")),
+                ("When", ts(player.state.last_start.get("t"))),
+                ("Channel", player.state.last_start.get("channel")),
+                ("Requested source", player.state.last_start.get("requested")),
                 (
                     "Result",
                     None
-                    if not player.last_start
-                    else ("ok via " + str(player.last_start.get("source")))
-                    if player.last_start.get("ok")
+                    if not player.state.last_start
+                    else ("ok via " + str(player.state.last_start.get("source")))
+                    if player.state.last_start.get("ok")
                     else "failed",
                 ),
                 (
                     "Duration",
-                    f"{player.last_start['seconds']:g} s" if player.last_start.get("seconds") is not None else None,
+                    f"{player.state.last_start['seconds']:g} s"
+                    if player.state.last_start.get("seconds") is not None
+                    else None,
                 ),
             ]
         ),
         "",
-        *(["```", *player.last_start.get("log", []), "```", ""] if player.last_start.get("log") else []),
+        *(["```", *player.state.last_start.get("log", []), "```", ""] if player.state.last_start.get("log") else []),
         "## Channel lists",
         "",
         table(
             [
-                ("TV7 channels", sum(1 for c in init7._cache["data"] if c.get("list") == "tv7")),
-                ("SRG Full HD channels", len(init7._cache["srg"]) if init7.SRG_FHD else "off"),
+                ("TV7 channels", sync["tv7"]),
+                ("SRG Full HD channels", "off" if sync["srg"] is None else sync["srg"]),
                 (
                     "Last successful sync (TV7 / SRG)",
-                    f"{ts(init7._sync['tv7_ok'])} / {ts(init7._sync['srg_ok']) if init7.SRG_FHD else 'off'}",
+                    f"{ts(sync['tv7_ok'])} / {'off' if sync['srg'] is None else ts(sync['srg_ok'])}",
                 ),
-                ("Last attempt", ts(init7._sync["tried"])),
+                ("Last attempt", ts(sync["tried"])),
                 ("Cache time", f"{init7.CACHE_S} s"),
-                ("Last error (TV7)", init7._sync["tv7_error"]),
-                ("Last error (SRG)", init7._sync["srg_error"]),
+                ("Last error (TV7)", sync["tv7_error"]),
+                ("Last error (SRG)", sync["srg_error"]),
             ]
         ),
         "",
@@ -275,12 +239,12 @@ def support_text():
                     )
                     for x in o.get("planes") or []
                 ],
-                ("Stopped because HDMI is disconnected", player.hdmi_stopped.get("name")),
+                ("Stopped because HDMI is disconnected", player.state.hdmi_stopped.get("name")),
                 ("Stop without operation (idle_stop)", settings.current_values().get("idle_stop")),
                 (
                     "Last automatic stop",
-                    f"{player.autostopped['reason']}: {player.autostopped['channel']} at {ts(player.autostopped['t'])}"
-                    if player.autostopped
+                    f"{player.state.autostopped['reason']}: {player.state.autostopped['channel']} at {ts(player.state.autostopped['t'])}"
+                    if player.state.autostopped
                     else None,
                 ),
             ]

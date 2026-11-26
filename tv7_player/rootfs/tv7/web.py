@@ -2,14 +2,12 @@
 
 import json
 import os
-import threading
-import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler
 
-from tv7 import cec, config, display, init7, mpvclient, player, settings, support, system, tvosd
+from tv7 import cec, config, display, init7, mpvclient, player, settings, supervisor, support, system, tvosd
 
 EVENTS_S = float(os.environ.get("TV7_EVENTS_S", "3"))  # /events: at least this often (live values)
 
@@ -25,9 +23,9 @@ def status_view():
         "audio_out": mpvclient.prop("current-ao"),
         "volume": mpvclient.prop("volume"),
         "mute": mpvclient.prop("mute"),
-        "channel": player.current["name"],
-        "pk": player.current["pk"],
-        "source": player.current["source"],
+        "channel": player.state.current["name"],
+        "pk": player.state.current["pk"],
+        "source": player.state.current["source"],
         "stream": {
             "w": mpvclient.prop("video-params/w"),
             "h": mpvclient.prop("video-params/h"),
@@ -44,12 +42,12 @@ def status_view():
         "system": system.system_load(),
         "audio_tracks": mpvclient.tracks()["audio"],
         "sub_tracks": mpvclient.tracks()["sub"],
-        "autostopped": dict(player.autostopped) or None,
+        "autostopped": dict(player.state.autostopped) or None,
         "hdmi_stopped": {
-            "channel": player.hdmi_stopped["name"],
+            "channel": player.state.hdmi_stopped["name"],
             "resume": settings.current_values().get("hdmi_disconnect") == "resume",
         }
-        if player.hdmi_stopped
+        if player.state.hdmi_stopped
         else None,
         "pending_restart": settings.pending_restart(),
         "osd": tvosd.osd_state["on"],
@@ -97,13 +95,8 @@ class H(BaseHTTPRequestHandler):
                 src = q.get("source", ["auto"])[0]
                 if src not in ("auto", "multicast", "hls"):
                     return self.reply(400, {"error": "source: auto, multicast or hls"})
-                t0 = time.time()
                 player.touch()
-                player.hdmi_stopped.clear()
-                player.autostopped.clear()
-                res = player.start(init7.find_channel(q["channel"][0]), src)
-                player.last_start.clear()
-                player.last_start.update(t=t0, seconds=round(time.time() - t0, 1), requested=src, **res)
+                res = player.play(init7.find_channel(q["channel"][0]), src)
                 return self.reply(200 if res["ok"] else 502, res)
             if u.path == "/stop":
                 player.touch()
@@ -186,9 +179,7 @@ class H(BaseHTTPRequestHandler):
         seen, last = None, None
         try:
             while True:
-                with mpvclient._changed:
-                    mpvclient._changed.wait_for(lambda seen=seen: mpvclient._version["n"] != seen, timeout=EVENTS_S)
-                    seen = mpvclient._version["n"]
+                seen = mpvclient.wait_change(seen, EVENTS_S)
                 data = json.dumps(status_view(), ensure_ascii=False)
                 self.wfile.write(f"data: {data}\n\n".encode() if data != last else b": still here\n\n")
                 self.wfile.flush()
@@ -225,12 +216,10 @@ class UiH(H):
                     return self.reply(400, {"error": 'body: {"favorites": [...]}'})
                 return self.reply(200, {"favorites": init7.save_favorites(body.get("favorites"))})
             if path == "/restart":
-                if not config.SUPERVISOR_TOKEN:
+                if not supervisor.available():
                     return self.reply(502, {"error": "restart needs the Supervisor API (hassio_api)"})
                 self.reply(200, {"ok": True})
-                threading.Thread(
-                    target=lambda: (time.sleep(0.5), settings.supervisor_call("/addons/self/restart")), daemon=True
-                ).start()
+                supervisor.restart_app()
                 return
             return self.reply(404, {"error": "unknown endpoint"})
         except ValueError as e:

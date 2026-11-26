@@ -6,7 +6,7 @@ import re
 import subprocess
 import zlib
 
-from tv7 import mpvclient, player, settings
+from tv7 import mpvclient
 
 DRM_DIR = os.environ.get("TV7_DRM_DIR", "/sys/class/drm")  # overridable for tests
 MODETEST = os.environ.get("TV7_MODETEST", "modetest")
@@ -40,13 +40,12 @@ def deinterlace_possible(hwdec):
     return hwdec == "no" or hwdec.endswith("-copy") or hwdec.startswith("vaapi")
 
 
-def update_deinterlace():
-    """Apply the deinterlace option where the current decoder allows it (see deinterlace_possible). "auto" deinterlaces only
-    frames that are interlaced (1080i channels), not the progressive ones (720p50, 1080p); mpv without "auto" gets "yes"."""
+def update_deinterlace(enabled):
+    """Apply the deinterlace option (enabled) where the current decoder allows it (see deinterlace_possible). "auto"
+    deinterlaces only frames that are interlaced (1080i channels), not the progressive ones (720p50, 1080p); mpv without
+    "auto" gets "yes"."""
     try:
-        if not (
-            settings.current_values().get("deinterlace", True) and deinterlace_possible(mpvclient.prop("hwdec-current"))
-        ):
+        if not (enabled and deinterlace_possible(mpvclient.prop("hwdec-current"))):
             mpvclient.mpv("set_property", "deinterlace", False)
         elif mpvclient.mpv("set_property", "deinterlace", "auto").get("error") != "success":
             mpvclient.mpv("set_property", "deinterlace", True)
@@ -408,34 +407,9 @@ def hw_available():
     return video_state()["hw"] == "yes"
 
 
-def match_refresh(log):
-    """video_refresh=auto: make the display refresh rate follow the stream's frame rate. Returns True if mpv was restarted."""
-    vals = settings.current_values()
-    if vals.get("video_refresh") != "auto" or vals.get("video_mode") == "highest":
-        return False
-    fps = mpvclient.prop("container-fps") or mpvclient.prop("estimated-vf-fps")
-    port = vals.get("hdmi_port") if vals.get("hdmi_port") != "auto" else ""
-    modes = drm_modes()
-    want = mode_for_fps(fps, vals.get("video_mode"), port, modes)
-    cur = current_drm_mode()
-    if not cur:  # no override yet: the mode mpv was started with
-        cur = video_state()["mode"]
-    if not cur:  # not known (mpv started by someone else): compute it the same way
-        start = {k: settings._applied.get(k, vals.get(k)) for k in ("video_mode", "video_refresh", "hdmi_port")}
-        cur = resolve_mode(
-            start["video_mode"],
-            start["video_refresh"],
-            start["hdmi_port"] if start["hdmi_port"] != "auto" else "",
-            modes,
-        )[0]
-    if cur == "preferred":  # find the index of the display's preferred mode
-        lists = [modes[port]] if port and port in modes else list(modes.values())
-        cur = next((str(m["index"]) for lst in lists for m in lst if m["preferred"]), "")
-    if want is None or str(want) == cur:
-        return False
-    VIDEO["override"] = str(want)
-    player.restart_mpv(log, f"output refresh rate follows the stream ({fps:g} fps)")
-    return True
+def set_mode_override(mode):
+    """The output mode mpv gets at its next start (follows the stream's frame rate); "" for none."""
+    VIDEO["override"] = str(mode)
 
 
 def pick_hwdec(vo, hardware_decoding, hwdec_help, v4l2_names, arch, render_node):

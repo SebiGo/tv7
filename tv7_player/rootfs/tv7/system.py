@@ -3,10 +3,9 @@
 import glob
 import json
 import os
-import subprocess
 import time
 
-from tv7 import cec, config, display, mpvclient, player, settings
+from tv7 import cec, config, display, mpvclient, mpvhost, player, settings
 
 
 def alsa_status():
@@ -18,17 +17,6 @@ def alsa_status():
         except Exception:
             pass
     return out
-
-
-def pulse_sinks():
-    """PulseAudio sinks of Home Assistant's audio service (empty if pactl or the service is missing)."""
-    try:
-        r = subprocess.run(["pactl", "list", "short", "sinks"], capture_output=True, text=True, timeout=4)
-        return [
-            {"name": p[1], "state": p[-1]} for p in (line.split("\t") for line in r.stdout.splitlines()) if len(p) >= 2
-        ]
-    except Exception:
-        return []
 
 
 def environment():
@@ -47,7 +35,7 @@ def environment():
         "hdmi_ports": ports,
         "audio": {
             "devices": devices,
-            "pulse_sinks": pulse_sinks(),
+            "pulse_sinks": mpvhost.pulse_sinks(),
             "current_device": mpvclient.prop("audio-device"),
             "current_ao": mpvclient.prop("current-ao"),
         },
@@ -127,7 +115,7 @@ def system_load():
 CPUFREQ_DIR = os.environ.get("TV7_CPUFREQ_DIR", "/sys/devices/system/cpu/cpu0/cpufreq")
 
 
-def _read(path):
+def read_text(path):
     try:
         return open(path).read().strip()
     except OSError:
@@ -136,11 +124,11 @@ def _read(path):
 
 def cpu_clock():
     """Current and maximum CPU clock in MHz (cpufreq of cpu0, all cores share one clock on the Pi)."""
-    cur, mx = _read(f"{CPUFREQ_DIR}/scaling_cur_freq"), _read(f"{CPUFREQ_DIR}/cpuinfo_max_freq")
+    cur, mx = read_text(f"{CPUFREQ_DIR}/scaling_cur_freq"), read_text(f"{CPUFREQ_DIR}/cpuinfo_max_freq")
     return {
         "mhz": round(int(cur) / 1000) if cur and cur.isdigit() else None,
         "max_mhz": round(int(mx) / 1000) if mx and mx.isdigit() else None,
-        "governor": _read(f"{CPUFREQ_DIR}/scaling_governor"),
+        "governor": read_text(f"{CPUFREQ_DIR}/scaling_governor"),
     }
 
 
@@ -211,8 +199,8 @@ def nerd():
         load = None
     return {
         "playing": mpvclient.playing(),
-        "channel": player.current["name"],
-        "source": player.current["source"],
+        "channel": player.state.current["name"],
+        "source": player.state.current["source"],
         "url": p["path"],
         "format": p["file-format"],
         "video": {

@@ -53,6 +53,15 @@ if __name__ == "__main__":
         config.UI_PORT = 8099  # Home Assistant Ingress (web UI in the sidebar)
     signal.signal(signal.SIGTERM, mpvhost.stop_app)
     signal.signal(signal.SIGINT, mpvhost.stop_app)
+    # Lower layers report events through these hooks; the modules that act on them sit above (see docs/DEVELOPMENT.md).
+    cec.handlers.update(
+        key=tvosd.handle_key,
+        standby=player.tv_standby,
+        shown=player.tv_shown,
+        playing=lambda: bool(player.state.current["pk"]),
+    )
+    player.handlers["resume"] = tvosd.resume
+    mpvclient.on_idle.append(tvosd.playback_ended)
     settings.init_settings()
     mpvclient.mpv_log()  # collect mpv's log from the start (nerd mode, support text)
     threading.Thread(target=player.watcher, daemon=True).start()

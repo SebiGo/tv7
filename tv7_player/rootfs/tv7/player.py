@@ -1,16 +1,49 @@
-"""What plays: channel start and stop on one worker thread, mpv restarts, the HDMI watcher, the stop without operation."""
+"""What plays: channel start and stop on one worker thread, mpv restarts, the output mode that follows the stream, and the
+automatic stops and resumes (HDMI display gone, no operation, TV switched away over HDMI-CEC).
+
+The playback state is `state`. Only this module changes it; the web UI, the TV menu and the support text read it."""
 
 import concurrent.futures
 import os
 import threading
 import time
+from dataclasses import dataclass, field
 
 from tv7 import cec, config, display, init7, mpvclient, settings
 
 START_TIMEOUT = float(os.environ.get("TV7_START_TIMEOUT", "10"))
 MODE_WAIT_S = float(os.environ.get("TV7_MODE_WAIT_S", "25"))
-current = {"pk": None, "name": None, "source": None}  # what was started last (shown by /status and the web UI)
-last_start = {}  # result and log of the last channel start (support text)
+
+
+@dataclass
+class Playback:
+    # what was started last (shown by /status and the web UI); pk None: nothing plays
+    current: dict = field(default_factory=lambda: {"pk": None, "name": None, "source": None})
+    # last channel started successfully (pk, source): the play key of the remote starts it again
+    last_played: dict = field(default_factory=dict)
+    # result and log of the last start someone asked for (support text)
+    last_start: dict = field(default_factory=dict)
+    # channel stopped by the HDMI watcher (pk, name, source, t); empty if none
+    hdmi_stopped: dict = field(default_factory=dict)
+    # last automatic stop: reason (idle | cec), channel, t and details; cleared by the next start
+    autostopped: dict = field(default_factory=dict)
+    # channel stopped because the TV switched away (HDMI-CEC), started again when the TV shows the app
+    tv_resume: dict = field(default_factory=dict)
+    # the TV switched to another source at this time (None: the TV shows the app)
+    tv_away_since: float | None = None
+    # last operation (start, stop, volume, mute, track); idle_stop counts from here
+    last_activity: float = field(default_factory=time.time)
+
+
+state = Playback()
+
+# resume(ch, source): starts a channel again after the TV showed another source. control.py sets it to the TV menu's start,
+# which shows the channel banner; without it the channel starts in the background.
+handlers = {"resume": lambda ch, source: player(_play, ch, source, wait=False)}
+
+
+def _clear_current():
+    state.current.update(pk=None, name=None, source=None)
 
 
 def stop_playback(wait=True):
@@ -18,12 +51,9 @@ def stop_playback(wait=True):
 
 
 def _stop_playback():
-    current.update(pk=None, name=None, source=None)
-    hdmi_stopped.clear()
+    _clear_current()
+    state.hdmi_stopped.clear()
     return mpvclient.mpv("stop")
-
-
-last_played = {}  # last channel started (play key)
 
 
 def restart_mpv(log, reason):
@@ -81,16 +111,35 @@ def player(fn, *args, wait=True):
     return _player_pool.submit(logged)
 
 
+def play(ch, source="auto"):
+    """A start someone asked for (web UI, API, TV menu, resume after CEC): clears the notes of automatic stops and keeps the
+    result and log for the support text. Returns {"ok", "channel", "source", "log", ...}."""
+    return player(_play, ch, source)
+
+
+def _play(ch, source):
+    t0 = time.time()
+    state.hdmi_stopped.clear()
+    state.autostopped.clear()
+    try:
+        res = _start_channel(ch, source)
+    except Exception as e:
+        res = {"ok": False, "channel": ch.get("name"), "log": [f"{type(e).__name__}: {e}"]}
+    state.last_start = {"t": t0, "seconds": round(time.time() - t0, 1), "requested": source, **res}
+    return res
+
+
 def start(ch, source):
+    """Start a channel without touching the notes of automatic stops (the HDMI watcher resumes with this)."""
     return player(_start_channel, ch, source)
 
 
 def _start_channel(ch, source):
     res = _start(ch, source)
     if res.get("ok"):
-        last_played.update(pk=ch["pk"], source=res.get("source"))
-        cec.cec_away["since"] = None
-        cec.cec_resume.clear()
+        state.last_played.update(pk=ch["pk"], source=res.get("source"))
+        state.tv_away_since = None
+        state.tv_resume.clear()
         cec.cec_active_source()  # TV/projector and receiver switch to the app; its remote keys come here
     return res
 
@@ -116,13 +165,13 @@ def _start(ch, source):
             while time.time() < end:
                 if mpvclient.playing():
                     log.append(f"{src}: started (attempt {attempt})")
-                    current.update(pk=ch["pk"], name=ch["name"], source=src)
-                    if display.match_refresh(log):  # mpv restarted with a new output mode: play the channel again
+                    state.current.update(pk=ch["pk"], name=ch["name"], source=src)
+                    if match_refresh(log):  # mpv restarted with a new output mode: play the channel again
                         mpvclient.mpv("loadfile", url, "replace")
                         t_end = time.time() + START_TIMEOUT
                         while time.time() < t_end and not mpvclient.playing():
                             time.sleep(0.5)
-                    display.update_deinterlace()
+                    display.update_deinterlace(settings.current_values().get("deinterlace", True))
                     return {"ok": True, "channel": ch["name"], "source": src, "log": log}
                 if (
                     display.connectors()
@@ -143,35 +192,60 @@ def _start(ch, source):
     return {"ok": False, "channel": ch["name"], "log": log}
 
 
+def match_refresh(log):
+    """video_refresh=auto: make the display refresh rate follow the stream's frame rate. Returns True if mpv was restarted."""
+    vals = settings.current_values()
+    if vals.get("video_refresh") != "auto" or vals.get("video_mode") == "highest":
+        return False
+    fps = mpvclient.prop("container-fps") or mpvclient.prop("estimated-vf-fps")
+    port = vals.get("hdmi_port") if vals.get("hdmi_port") != "auto" else ""
+    modes = display.drm_modes()
+    want = display.mode_for_fps(fps, vals.get("video_mode"), port, modes)
+    cur = display.current_drm_mode()
+    if not cur:  # no override yet: the mode mpv was started with
+        cur = display.video_state()["mode"]
+    if not cur:  # not known (mpv started by someone else): compute it the same way
+        start = {k: settings.applied_value(k) for k in ("video_mode", "video_refresh", "hdmi_port")}
+        port0 = start["hdmi_port"] if start["hdmi_port"] != "auto" else ""
+        cur = display.resolve_mode(start["video_mode"], start["video_refresh"], port0, modes)[0]
+    if cur == "preferred":  # find the index of the display's preferred mode
+        lists = [modes[port]] if port and port in modes else list(modes.values())
+        cur = next((str(m["index"]) for lst in lists for m in lst if m["preferred"]), "")
+    if want is None or str(want) == cur:
+        return False
+    display.set_mode_override(want)
+    restart_mpv(log, f"output refresh rate follows the stream ({fps:g} fps)")
+    return True
+
+
 HDMI_OFF_S = float(os.environ.get("TV7_HDMI_OFF_S", "15"))  # display gone this long: stop playback
 HDMI_BACK_S = float(os.environ.get("TV7_HDMI_BACK_S", "3"))  # display back this long: resume
 HDMI_POLL_S = float(os.environ.get("TV7_HDMI_POLL_S", "2"))
-hdmi_stopped = {}  # channel stopped by the watcher (pk, name, source, t); empty if none
 
 
-def hdmi_watch_step(state):
+def hdmi_watch_step(timers):
     """One check. Stops playback when no HDMI display is connected for HDMI_OFF_S (option hdmi_disconnect: resume|stop) and,
-    with resume, starts the same channel again when the display is back for HDMI_BACK_S. state keeps the timers between calls."""
+    with resume, starts the same channel again when the display is back for HDMI_BACK_S. timers keeps the times between calls."""
     mode = settings.current_values().get("hdmi_disconnect", "resume")
     if not display.connectors() or mode == "keep":
-        state.clear()
-        hdmi_stopped.clear()
+        timers.clear()
+        state.hdmi_stopped.clear()
         return
     now, ok = time.time(), display.hdmi_ok()
-    if state.get("ok") != ok:  # display connected or gone: the web UI shows it
-        state["ok"] = ok
+    if timers.get("ok") != ok:  # display connected or gone: the web UI shows it
+        timers["ok"] = ok
         mpvclient.changed()
     if ok:
-        state.pop("off_since", None)
-        state.setdefault("on_since", now)
+        timers.pop("off_since", None)
+        timers.setdefault("on_since", now)
     else:
-        state.pop("on_since", None)
-        state.setdefault("off_since", now)
-    if not ok and current["pk"] and not hdmi_stopped and now - state["off_since"] >= HDMI_OFF_S:
+        timers.pop("on_since", None)
+        timers.setdefault("off_since", now)
+    if not ok and state.current["pk"] and not state.hdmi_stopped and now - timers["off_since"] >= HDMI_OFF_S:
         player(_hdmi_stop, mode)
-    elif ok and hdmi_stopped and now - state["on_since"] >= HDMI_BACK_S:
-        ch = dict(hdmi_stopped)
-        hdmi_stopped.clear()
+    elif ok and state.hdmi_stopped and now - timers["on_since"] >= HDMI_BACK_S:
+        ch = dict(state.hdmi_stopped)
+        state.hdmi_stopped.clear()
         if mode != "resume":
             return
         try:
@@ -185,28 +259,27 @@ def hdmi_watch_step(state):
 
 
 def _hdmi_stop(mode):
-    if not current["pk"] or hdmi_stopped:
+    if not state.current["pk"] or state.hdmi_stopped:
         return
-    hdmi_stopped.update(pk=current["pk"], name=current["name"], source=current["source"], t=time.time())
+    cur = state.current
+    state.hdmi_stopped.update(pk=cur["pk"], name=cur["name"], source=cur["source"], t=time.time())
     try:
         mpvclient.mpv("stop")
     except Exception:
         pass
-    current.update(pk=None, name=None, source=None)
+    _clear_current()
     config.log_line(
-        f"No HDMI display for {HDMI_OFF_S:g} s: playback of {hdmi_stopped['name']} stopped"
+        f"No HDMI display for {HDMI_OFF_S:g} s: playback of {state.hdmi_stopped['name']} stopped"
         + (", it resumes when the display is back" if mode == "resume" else "")
     )
 
 
 MINUTE_S = float(os.environ.get("TV7_MINUTE_S", "60"))  # overridable for tests
-autostopped = {}  # last automatic stop: {"reason": "idle", "channel", "t", "minutes"}; cleared by the next start
-last_activity = {"t": time.time()}
 
 
 def touch():
     """An operation (start, stop, volume, mute, track): restarts the inactivity time."""
-    last_activity["t"] = time.time()
+    state.last_activity = time.time()
 
 
 def auto_stop(reason, text, **extra):
@@ -214,32 +287,83 @@ def auto_stop(reason, text, **extra):
 
 
 def _auto_stop(reason, text, extra):
-    if not current["pk"]:
+    if not state.current["pk"]:
         return
-    autostopped.clear()
-    autostopped.update(reason=reason, channel=current["name"], t=time.time(), **extra)
+    state.autostopped = {"reason": reason, "channel": state.current["name"], "t": time.time(), **extra}
     try:
         mpvclient.mpv("stop")
     except Exception:
         pass
-    current.update(pk=None, name=None, source=None)
-    hdmi_stopped.clear()
+    _clear_current()
+    state.hdmi_stopped.clear()
     config.log_line(text)
 
 
 def autostop_step():
     """No operation for idle_stop minutes while a channel plays: stop, so the app does not load the system when nobody watches."""
-    now = time.time()
     idle = settings.current_values().get("idle_stop", "off")
-    if idle != "off" and current["pk"] and now - last_activity["t"] >= float(idle) * MINUTE_S:
-        auto_stop("idle", f"No operation for {idle} min: playback of {current['name']} stopped", minutes=int(idle))
+    if idle != "off" and state.current["pk"] and time.time() - state.last_activity >= float(idle) * MINUTE_S:
+        name = state.current["name"]
+        auto_stop("idle", f"No operation for {idle} min: playback of {name} stopped", minutes=int(idle))
+
+
+CEC_AWAY_S = float(os.environ.get("TV7_CEC_AWAY_S", "30"))  # the TV shows another source this long: stop
+
+
+def tv_standby():
+    """HDMI-CEC: the TV switched to standby."""
+    tv_gone("the TV switched to standby")
+
+
+def tv_gone(reason):
+    """The TV switched to standby (at once) or to another source (after CEC_AWAY_S): stop like for a missing display
+    (option hdmi_disconnect: resume = start again when the TV shows the app again, stop = only stop, keep = keep playing)."""
+    player(_tv_gone, reason)
+
+
+def _tv_gone(reason):
+    mode = settings.current_values().get("hdmi_disconnect", "resume")
+    if mode == "keep" or not state.current["pk"]:
+        return
+    state.tv_resume.clear()
+    if mode == "resume":
+        state.tv_resume.update(pk=state.current["pk"], source=state.current["source"])
+    state.tv_away_since = None
+    auto_stop(
+        "cec",
+        f"HDMI-CEC: {reason}: playback of {state.current['name']} stopped"
+        + (", it resumes when the TV shows TV7 again" if mode == "resume" else ""),
+    )
+
+
+def tv_shown(ours):
+    """HDMI-CEC: the TV switched to a source; ours: to the app."""
+    if ours:
+        state.tv_away_since = None
+        if state.tv_resume and not state.current["pk"]:
+            ch = dict(state.tv_resume)
+            state.tv_resume.clear()
+            try:
+                config.log_line("HDMI-CEC: the TV shows TV7 again, playback resumes")
+                source = ch["source"] if ch["source"] in ("multicast", "hls") else "auto"
+                handlers["resume"](init7.find_channel(ch["pk"]), source)
+            except Exception as e:
+                config.log_line(f"HDMI-CEC: resume failed: {e}")
+    elif state.current["pk"] and state.tv_away_since is None:
+        state.tv_away_since = time.time()
+
+
+def tv_away_step():
+    """Called by the watcher: the TV has shown another source for CEC_AWAY_S."""
+    if state.tv_away_since is not None and time.time() - state.tv_away_since >= CEC_AWAY_S:
+        tv_gone("the TV shows another source")
 
 
 def watcher():
     """Background checks: HDMI display present, inactivity, TV switched away (HDMI-CEC)."""
-    state = {}
+    timers = {}
     while True:
-        for step in (lambda: hdmi_watch_step(state), autostop_step, cec.cec_away_step):
+        for step in (lambda: hdmi_watch_step(timers), autostop_step, tv_away_step):
             try:
                 step()
             except Exception as e:

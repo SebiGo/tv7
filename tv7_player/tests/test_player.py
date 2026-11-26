@@ -8,7 +8,7 @@ import threading
 import pytest
 
 from fakes import wait_for
-from tv7 import display, mpvhost, system
+from tv7 import display, mpvhost
 
 HELP_PI = "Valid values (with alternative full names):\n  drm (hevc-drm)\n  drm-copy (hevc-drm-copy)\n  v4l2m2m-copy (h264_v4l2m2m-v4l2m2m-copy)"
 HELP_X86 = "Valid values (with alternative full names):\n  vaapi (h264-vaapi)\n  vaapi-copy (h264-vaapi-copy)"
@@ -63,12 +63,12 @@ def aplay(monkeypatch):
 
 def test_audio_device(aplay, monkeypatch):
     sink = "alsa_output.platform-107c701400.hdmi.hdmi-stereo"
-    monkeypatch.setattr(system, "pulse_sinks", lambda: [{"name": sink, "state": "IDLE"}])
+    monkeypatch.setattr(mpvhost, "pulse_sinks", lambda: [{"name": sink, "state": "IDLE"}])
     assert mpvhost.audio_args({}, "card1-HDMI-A-1") == [f"--audio-device=pulse/{sink}"], "auto: PulseAudio first"
     assert mpvhost.audio_args({"audio_output": "alsa"}, "card1-HDMI-A-2") == [
         "--audio-device=alsa/hdmi:CARD=vc4hdmi1,DEV=0"
     ]
-    monkeypatch.setattr(system, "pulse_sinks", lambda: [])
+    monkeypatch.setattr(mpvhost, "pulse_sinks", lambda: [])
     assert mpvhost.audio_args({}, "card1-HDMI-A-1") == ["--audio-device=alsa/hdmi:CARD=vc4hdmi0,DEV=0"], "no PulseAudio"
     assert mpvhost.audio_args({"audio_device": "alsa/x"}, "card1-HDMI-A-1") == ["--audio-device=alsa/x"], (
         "explicit wins"

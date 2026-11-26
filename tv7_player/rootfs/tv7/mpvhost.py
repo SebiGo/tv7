@@ -5,7 +5,7 @@ import os
 import subprocess
 import time
 
-from tv7 import config, display, mpvclient, settings, system
+from tv7 import config, display, mpvclient, settings
 
 # control.py starts mpv itself (run.sh only starts control.py): it chooses the video output, hardware decoding, output mode and
 # audio device, starts mpv and starts it again whenever it ends (a crash must not leave the player dead; a channel start asks
@@ -85,13 +85,24 @@ def setup_video(opts, drm_args):
     config.log_line(f"Hardware decoding ({opts.get('hardware_decoding', 'auto')}): {msg}")
 
 
+def pulse_sinks():
+    """PulseAudio sinks of Home Assistant's audio service (empty if pactl or the service is missing)."""
+    try:
+        r = subprocess.run(["pactl", "list", "short", "sinks"], capture_output=True, text=True, timeout=4)
+        return [
+            {"name": p[1], "state": p[-1]} for p in (line.split("\t") for line in r.stdout.splitlines()) if len(p) >= 2
+        ]
+    except Exception:
+        return []
+
+
 def audio_args(opts, connector):
     """Audio device. Home Assistant's audio service (PulseAudio) may already own the HDMI ALSA card ("Device or resource busy"), so
     in "auto" a PulseAudio HDMI sink comes first, then the ALSA device of the connector (HDMI-A-1 = vc4hdmi0, HDMI-A-2 = vc4hdmi1),
     then any ALSA HDMI device; otherwise mpv chooses. An explicit audio_device (mpv syntax) overrides all of this."""
     dev = opts.get("audio_device") or ""
     if not dev or dev == "auto":
-        pulse = next((f"pulse/{x['name']}" for x in system.pulse_sinks() if "hdmi" in x["name"].lower()), "")
+        pulse = next((f"pulse/{x['name']}" for x in pulse_sinks() if "hdmi" in x["name"].lower()), "")
         try:
             aplay = subprocess.run(["aplay", "-L"], capture_output=True, text=True, timeout=5).stdout.splitlines()
         except Exception:
