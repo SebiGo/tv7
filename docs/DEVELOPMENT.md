@@ -32,70 +32,80 @@ The devcontainer image has pytest, ruff, yamllint and shellcheck. With `dev/run-
 - Practical workflow: develop in the web container, then test the real output on the Pi (copy `tv7_player` to `/local_apps` on Home Assistant OS and update the app, or the hardware devcontainer over Remote-SSH on a Pi).
 
 ## Architecture
+The diagrams are Mermaid: GitHub shows them as graphics; in VS Code a Markdown preview with Mermaid support does.
+
 One process (`control.py`) controls one mpv, which draws straight onto the HDMI display. Every arrow is a call or a request in the direction of the arrow.
-```
- Browser ── Home Assistant Ingress ──┐    Automations, REST commands ──┐
-                                     ▼                                 ▼
-┌─ TV7 Player app (one container) ─────────────────────────────────────────┐
-│ web        web UI :8099 (only the Supervisor may connect)                │
-│            API 127.0.0.1:8765 (only Home Assistant on this device)       │
-│   │        supervisor ──▶ Supervisor API (options, restart, logs, Core)  │
-│   ▼                                                                      │
-│ player     one worker thread starts, stops and restarts what plays       │
-│   ▲ ▲ ▲  │                                                               │
-│   │ │ │  ├─▶ init7: channel list, logos, Init7-only stream URLs          │
-│   │ │ │  └─▶ mpvclient ── JSON IPC (/tmp/mpv.sock) ──▶ mpv               │
-│   │ │ │                                                                  │
-│   │ │ └─── watcher: HDMI display gone, idle_stop, TV switched away       │
-│   │ └───── tvmenu: TV menu, channel banner (tvinfo: technical info)      │
-│   └─────── cec ◀── cec-ctl ◀── TV remote (HDMI-CEC)                      │
-│                                                                          │
-│ mpvhost    starts mpv, starts it again when it exits                     │
-│ display    HDMI ports, output modes, planes, decoder choice              │
-│ mpv ──▶ Init7: multicast (udp://) or HLS                                 │
-└──────────────────────────────────────────────────────────────────────────┘
-   │ picture: DRM/KMS /dev/dri/card1      sound: PulseAudio of Home Assistant
-   ▼
-  HDMI ──▶ TV
+```mermaid
+flowchart TB
+    browser["Browser"] -->|"Home Assistant Ingress, :8099"| web
+    automations["Automations, REST commands"] -->|"127.0.0.1:8765"| web
+    subgraph app["TV7 Player app (one container)"]
+        web["web<br/>HTTP API and web UI"]
+        supervisor["supervisor"]
+        player["player<br/>one worker thread starts, stops and restarts what plays"]
+        watcher["watcher<br/>HDMI display gone, idle_stop, TV switched away"]
+        tv["tvmenu, tvinfo<br/>TV menu, channel banner, technical info"]
+        cec["cec"]
+        init7["init7<br/>channel lists, logos, Init7-only stream URLs"]
+        mpvclient["mpvclient"]
+        mpvhost["mpvhost<br/>starts mpv, starts it again when it exits"]
+        mpv(["mpv"])
+    end
+    web --> player
+    web --> supervisor
+    supervisor -->|"options, restart, logs, Core config"| supapi["Supervisor API"]
+    watcher --> player
+    tv --> player
+    remote["TV remote"] -->|"HDMI-CEC, cec-ctl"| cec
+    cec --> tv
+    cec --> player
+    player --> init7
+    player --> mpvclient
+    mpvclient -->|"JSON IPC, /tmp/mpv.sock"| mpv
+    mpvhost -->|"starts"| mpv
+    init7 -->|"HTTPS"| init7net["Init7"]
+    mpv -->|"multicast or HLS"| init7net
+    mpv -->|"picture: DRM/KMS /dev/dri/card1<br/>sound: PulseAudio of Home Assistant"| screen["HDMI: TV, projector, receiver"]
 ```
 The tests replace everything outside the app with fakes (`tests/fakes.py`) and start the real `control.py` against them:
-```
- pytest ──▶ App = control.py <socket> <port> ──▶ API / web UI over HTTP
-              │
-              ├─ mpv IPC ───────▶ mock_mpv.MockMpv     records everything in world.state
-              ├─ TV7_DRM_DIR ───▶ fake sysfs           world.hdmi("connected" | "disconnected")
-              ├─ TV7_MODETEST ──▶ fake modetest        output modes of a 4K TV
-              ├─ TV7_API ───────▶ fake Init7 (HTTP)    channel list, SRG lists, logos
-              ├─ TV7_SUPERVISOR ▶ fake Supervisor      options, restart, Core config (world.sup)
-              └─ TV7_CEC_CTL ───▶ fake cec-ctl         only in test_cec.py
+```mermaid
+flowchart LR
+    pytest["pytest"] -->|"HTTP: API and web UI"| app["App: control.py, attached to the fake mpv"]
+    app -->|"mpv IPC"| mock["mock_mpv.MockMpv<br/>records everything in world.state"]
+    app -->|"TV7_DRM_DIR"| sysfs["fake sysfs<br/>world.hdmi('connected')"]
+    app -->|"TV7_MODETEST"| modetest["fake modetest<br/>output modes of a 4K TV"]
+    app -->|"TV7_API"| init7["fake Init7 over HTTP<br/>channel list, SRG lists, logos"]
+    app -->|"TV7_SUPERVISOR"| sup["fake Supervisor<br/>options, restart, Core config"]
+    app -->|"TV7_CEC_CTL"| cecctl["fake cec-ctl<br/>only in test_cec.py"]
 ```
 
 ## Modules and layers
 The modules of `tv7/` sit in layers. A module imports only modules of the layers below it; `tests/test_layers.py` checks
 that. Where a lower module has to tell an upper one something (a key from the TV remote, playback ended), it calls a hook
 that `control.py` fills at start.
-```
- 8  web                    HTTP API and web UI: endpoints, /events
- 7  tvmenu  support        TV menu, channel banner, remote keys  |  support text
- 6  tvinfo                 technical info on the TV picture
- 5  system  tvdraw         live data for the views  |  drawing on the TV: shapes, texts, language, logos
- 4  player  mpvhost        what plays and why it stopped  |  starting and supervising mpv
- 3  settings               options: read, validate, save, apply live
- 2  display  cec           HDMI/DRM: ports, modes, planes  |  HDMI-CEC bus
- 1  init7  supervisor  mpvclient
-                           Init7 channel lists  |  Supervisor API  |  mpv IPC
- 0  config  png  hwdec     paths, version, texts, log  |  PNG decoder  |  decoder choice per device
-```
+| Layer | Modules | What they do |
+|---|---|---|
+| 8 | `web` | HTTP API and web UI: endpoints, `/events` |
+| 7 | `tvmenu`, `support` | TV menu, channel banner, remote keys; support text |
+| 6 | `tvinfo` | technical info on the TV picture |
+| 5 | `system`, `tvdraw` | live data for the views; drawing on the TV (shapes, texts, language, logos) |
+| 4 | `player`, `mpvhost` | what plays and why it stopped; starting and supervising mpv |
+| 3 | `settings` | options: read, validate, save, apply live |
+| 2 | `display`, `cec` | HDMI/DRM ports, modes, planes; the HDMI-CEC bus |
+| 1 | `init7`, `supervisor`, `mpvclient` | Init7 channel lists; Supervisor API; mpv IPC |
+| 0 | `config`, `png`, `hwdec` | paths, times, texts, log; PNG decoder; hardware decoder per device |
 Hooks (set in `control.py`):
-```
- cec.handlers["key"]       ──▶ tvmenu.handle_key       a key of the TV remote
- cec.handlers["standby"]   ──▶ player.tv_standby       the TV switched to standby
- cec.handlers["shown"]     ──▶ player.tv_shown         the TV switched to a source (the app's or another)
- cec.handlers["playing"]   ──▶ player.state            whether a channel plays (the TV asks who the active source is)
- player.handlers["resume"] ──▶ tvmenu.resume           start again after the TV came back, with the channel banner
- mpvclient.on_idle         ──▶ tvinfo.playback_ended   playback ended: remove the technical info at once
- tvdraw.on_logo_ready      ──▶ tvmenu.logo_ready       a channel logo is converted: draw the menu or banner again
-```
+
+| Hook | Set to | When |
+|---|---|---|
+| `cec.handlers["key"]` | `tvmenu.handle_key` | a key of the TV remote |
+| `cec.handlers["standby"]` | `player.tv_standby` | the TV switched to standby |
+| `cec.handlers["shown"]` | `player.tv_shown` | the TV switched to a source (the app's or another) |
+| `cec.handlers["playing"]` | reads `player.state` | the TV asks who the active source is |
+| `player.handlers["resume"]` | `tvmenu.resume` | start again after the TV came back, with the channel banner |
+| `mpvclient.on_idle` | `tvinfo.playback_ended` | playback ended: remove the technical info at once |
+| `tvdraw.on_logo_ready` | `tvmenu.logo_ready` | a channel logo is converted: draw the menu or banner again |
+
 **Playback state:** `player.state` holds what plays, the last start (support text), the last channel (play key) and the
 notes of automatic stops. Only `player` changes it; everything else reads it. Every change of what plays goes through
 `player.player(...)`, one worker thread, so the web UI, the TV menu, CEC and the watcher never overlap. `player.play()` is
