@@ -3,7 +3,12 @@
 from tv7 import config, mpvclient, player, system, tvdraw
 
 OSD_ID = 7  # overlay id (osd-overlay); the idle logo uses overlay-add, separate
-osd_state = {"on": False, "lang": None, "shown": False, "rows": None}
+_osd = {"on": False, "lang": None, "shown": False, "rows": None}  # changed only here
+
+
+def is_on():
+    """Whether the technical info is switched on (for everyone)."""
+    return _osd["on"]
 
 
 def _num(v):
@@ -114,11 +119,11 @@ def osd_ass(lines):
 def osd_step():
     """Show or refresh the technical info while it is on and a channel plays; remove it otherwise. The box behind it is
     its own overlay and is drawn again only when the number of rows changes."""
-    want = osd_state["on"] and mpvclient.playing()
+    want = _osd["on"] and mpvclient.playing()
     if want:
-        lines = osd_lines(osd_state["lang"] or tvdraw.lang())
+        lines = osd_lines(_osd["lang"] or tvdraw.lang())
         n = len([x for x in lines if x[0] is not None])
-        if osd_state.get("rows") != n or not osd_state["shown"]:
+        if _osd.get("rows") != n or not _osd["shown"]:
             mpvclient.mpv_named(
                 name="osd-overlay",
                 id=OSD_BG_ID,
@@ -128,38 +133,38 @@ def osd_step():
                 res_y=1080,
                 z=6,
             )
-            osd_state["rows"] = n
+            _osd["rows"] = n
         mpvclient.mpv_named(
             name="osd-overlay", id=OSD_ID, format="ass-events", data=osd_ass(lines), res_x=1920, res_y=1080, z=7
         )
-        osd_state["shown"] = True
-    elif osd_state["shown"]:
+        _osd["shown"] = True
+    elif _osd["shown"]:
         hide()
 
 
 def playback_ended():
     """mpv went idle (mpvclient.on_idle): the technical info goes at once instead of at its next refresh."""
-    if osd_state["shown"]:
+    if _osd["shown"]:
         osd_step()
 
 
 def hide():
-    if osd_state["shown"]:
+    if _osd["shown"]:
         try:
             for i in (OSD_ID, OSD_BG_ID):
                 mpvclient.mpv_named(name="osd-overlay", id=i, format="none", data="")
         except Exception as e:
             config.log_once("Removing the technical info", e)
-        osd_state.update(shown=False, rows=None)
+        _osd.update(shown=False, rows=None)
 
 
 def set_osd(on, lang=None):
     lang = lang if lang in config.TV_LABELS else None  # None: Home Assistant's language
-    osd_state.update(on=bool(on), lang=lang)
+    _osd.update(on=bool(on), lang=lang)
     tvdraw.set_asked_lang(lang)
     mpvclient.changed()
     try:
         osd_step()
     except Exception as e:
         config.log_once("Technical info on the TV", e)
-    return {"on": osd_state["on"]}
+    return {"on": _osd["on"]}

@@ -2,6 +2,7 @@
 
 import json
 import os
+import threading
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -62,6 +63,8 @@ SETTINGS = [
 ]
 BY_KEY = {x["key"]: x for x in SETTINGS}
 DEFAULTS = {x["key"]: x["default"] for x in SETTINGS}
+# _applied and _saved are changed by requests and by the watcher: only under _lock
+_lock = threading.RLock()
 _applied = {}  # what the running process actually uses (restart-only settings keep their start value)
 _saved = {}  # values saved through the UI (the options file may lag behind)
 
@@ -74,18 +77,25 @@ def read_options():
 
 
 def current_values():
-    o = {**DEFAULTS, **read_options(), **_saved}
+    with _lock:
+        saved = dict(_saved)
+    o = {**DEFAULTS, **read_options(), **saved}
     return {k: o.get(k, DEFAULTS[k]) for k in BY_KEY}
 
 
 def applied_value(key):
     """The value the running process uses (a restart-only setting keeps its value from the start)."""
-    return _applied.get(key, current_values()[key])
+    with _lock:
+        if key in _applied:
+            return _applied[key]
+    return current_values()[key]
 
 
 def pending_restart(values=None):
     values = values or current_values()
-    return [k for k, spec in BY_KEY.items() if spec["restart"] and k in _applied and _applied[k] != values.get(k)]
+    with _lock:
+        applied = dict(_applied)
+    return [k for k, spec in BY_KEY.items() if spec["restart"] and k in applied and applied[k] != values.get(k)]
 
 
 def apply_live(key, val):
@@ -97,21 +107,26 @@ def apply_live(key, val):
             pass  # read by the watcher on every check
         else:
             return False
-        _applied[key] = val
+        with _lock:
+            _applied[key] = val
         return True
     except Exception:
         return False
 
 
 def init_settings():
-    _applied.update(current_values())
+    values = current_values()
+    with _lock:
+        _applied.update(values)
 
 
 def sync_live():
     """Settings changed behind our back (HA's configuration page): apply the live ones."""
     cur = current_values()
     for k, spec in BY_KEY.items():
-        if not spec["restart"] and _applied.get(k) != cur[k]:
+        with _lock:
+            changed = _applied.get(k) != cur[k]
+        if not spec["restart"] and changed:
             apply_live(k, cur[k])
 
 
@@ -145,8 +160,8 @@ def settings_view(lang="en"):
             it["unavailable"] = [
                 c for c in spec["choices"] if c in display.VIDEO_PRESETS and display.VIDEO_PRESETS[c] not in sizes
             ]
-        elif k == "cec" and cec.cec_state["state"] in cec.CEC_LOCKED:
-            it["locked"] = cec.cec_state["state"]  # the web UI greys the option out and says why
+        elif k == "cec" and cec.locked():
+            it["locked"] = cec.locked()  # the web UI greys the option out and says why
         items.append(it)
     cur = current_values()
     return {
@@ -198,7 +213,8 @@ def save_settings(values):
         except Exception:
             msg = str(e)
         raise RuntimeError(f"Supervisor rejected the options: {msg}") from e
-    _saved.update(values)
+    with _lock:
+        _saved.update(values)
     live = [k for k, v in values.items() if apply_live(k, v)]
     mpvclient.changed()
     return {"ok": True, "applied_now": live, "pending_restart": pending_restart(current_values())}

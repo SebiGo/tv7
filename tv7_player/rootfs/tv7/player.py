@@ -1,7 +1,9 @@
 """What plays: channel start and stop on one worker thread, mpv restarts, the output mode that follows the stream, and
 the automatic stops and resumes (HDMI display gone, no operation, TV switched away over HDMI-CEC).
 
-The playback state is `state`. Only this module changes it; the web UI, the TV menu and the support text read it."""
+The playback state is `state`. Only this module changes it, and it replaces a field as a whole instead of changing it in
+place, so the web UI, the TV menu and the support text, which read it from other threads, always see one consistent
+value."""
 
 import concurrent.futures
 import itertools
@@ -40,7 +42,7 @@ handlers = {"resume": lambda ch, source: play(ch, source, wait=False)}
 
 
 def _clear_current():
-    state.current.update(pk=None, name=None, source=None)
+    state.current = {"pk": None, "name": None, "source": None}
 
 
 # Every wish that replaces what plays (a start, a stop) takes the next number when it is asked for, before it waits in
@@ -68,7 +70,7 @@ def stop_playback(wait=True):
 
 def _stop_playback():
     _clear_current()
-    state.hdmi_stopped.clear()
+    state.hdmi_stopped = {}
     return mpvclient.mpv("stop")
 
 
@@ -144,8 +146,8 @@ def play(ch, source="auto", wait=True, done=None):
 
 def _play(ch, source, n=None):
     t0 = time.time()
-    state.hdmi_stopped.clear()
-    state.autostopped.clear()
+    state.hdmi_stopped = {}
+    state.autostopped = {}
     try:
         res = _start_channel(ch, source, n)
     except Exception as e:
@@ -162,9 +164,9 @@ def start(ch, source):
 def _start_channel(ch, source, n=None):
     res = _start(ch, source, n)
     if res.get("ok"):
-        state.last_played.update(pk=ch["pk"], source=res.get("source"))
+        state.last_played = {"pk": ch["pk"], "source": res.get("source")}
         state.tv_away_since = None
-        state.tv_resume.clear()
+        state.tv_resume = {}
         cec.cec_active_source()  # TV/projector and receiver switch to the app; its remote keys come here
     return res
 
@@ -201,7 +203,7 @@ def _start(ch, source, n=None):
                     return cancelled()
                 if mpvclient.playing():
                     log.append(f"{src}: started (attempt {attempt})")
-                    state.current.update(pk=ch["pk"], name=ch["name"], source=src)
+                    state.current = {"pk": ch["pk"], "name": ch["name"], "source": src}
                     if match_refresh(log):  # mpv restarted with a new output mode: play the channel again
                         mpvclient.mpv("loadfile", url, "replace")
                         t_end = time.time() + config.START_TIMEOUT
@@ -259,7 +261,7 @@ def hdmi_watch_step(timers):
     again when the display is back for config.HDMI_BACK_S. timers keeps the times between calls."""
     if not display.connectors():
         timers.clear()
-        state.hdmi_stopped.clear()
+        state.hdmi_stopped = {}
         return
     now, ok = time.time(), display.hdmi_ok()
     if timers.get("ok") != ok:  # display connected or gone: the web UI shows it
@@ -275,7 +277,7 @@ def hdmi_watch_step(timers):
         player(_hdmi_stop)
     elif ok and state.hdmi_stopped and now - timers["on_since"] >= config.HDMI_BACK_S:
         ch = dict(state.hdmi_stopped)
-        state.hdmi_stopped.clear()
+        state.hdmi_stopped = {}
         try:
             res = start(init7.find_channel(ch["pk"]), ch["source"] if ch["source"] in ("multicast", "hls") else "auto")
             config.log_line(
@@ -290,7 +292,7 @@ def _hdmi_stop():
     if not state.current["pk"] or state.hdmi_stopped:
         return
     cur = state.current
-    state.hdmi_stopped.update(pk=cur["pk"], name=cur["name"], source=cur["source"], t=time.time())
+    state.hdmi_stopped = {"pk": cur["pk"], "name": cur["name"], "source": cur["source"], "t": time.time()}
     try:
         mpvclient.mpv("stop")
     except Exception as e:
@@ -320,7 +322,7 @@ def _auto_stop(reason, text, extra):
     except Exception as e:
         config.log_once("Stopping mpv", e)
     _clear_current()
-    state.hdmi_stopped.clear()
+    state.hdmi_stopped = {}
     config.log_line(text)
 
 
@@ -347,8 +349,7 @@ def tv_gone(reason):
 def _tv_gone(reason):
     if not state.current["pk"]:
         return
-    state.tv_resume.clear()
-    state.tv_resume.update(pk=state.current["pk"], source=state.current["source"])
+    state.tv_resume = {"pk": state.current["pk"], "source": state.current["source"]}
     state.tv_away_since = None
     auto_stop(
         "cec",
@@ -362,7 +363,7 @@ def tv_shown(ours):
         state.tv_away_since = None
         if state.tv_resume and not state.current["pk"]:
             ch = dict(state.tv_resume)
-            state.tv_resume.clear()
+            state.tv_resume = {}
             try:
                 config.log_line("HDMI-CEC: the TV shows TV7 again, playback resumes")
                 source = ch["source"] if ch["source"] in ("multicast", "hls") else "auto"

@@ -12,7 +12,25 @@ import time
 from tv7 import config, supervisor
 
 CEC_NAME = "TV7"  # OSD name: how the app shows up in the TV's/projector's device list
-cec_state = {"state": "off", "device": None, "detail": None, "devices": [], "topology": []}
+# state, device, detail, devices, topology, phys. Replaced as a whole (_set_state); others read it with state().
+_state = {"state": "off", "device": None, "detail": None, "devices": [], "topology": []}
+
+
+def state():
+    return _state
+
+
+def locked():
+    """The CEC state if it keeps the app out (the option is greyed out), else None."""
+    return _state["state"] if _state["state"] in CEC_LOCKED else None
+
+
+def _set_state(reset=False, **values):
+    global _state
+    base = {"state": "off", "device": None, "detail": None, "devices": [], "topology": []} if reset else _state
+    _state = {**base, **values}
+
+
 CEC_LOCKED = ("ha_integration", "in_use")  # states in which the web UI greys out the option
 
 
@@ -134,16 +152,16 @@ def cec_setup(enabled):
                     config.log_line(f"CEC: option off, registration of the app on {d} removed")
                 except Exception as e:
                     config.log_once("CEC: removing the app's registration", e)
-        cec_state.update(state="off", device=None, detail=None, devices=[], topology=[])
+        _set_state(reset=True)
         return
     if not devs:
-        cec_state.update(state="no_device", detail="no /dev/cec* device in the app")
+        _set_state(state="no_device", detail="no /dev/cec* device in the app")
         config.log_line("CEC: no CEC device available")
         return
-    cec_state.update(state="waiting", detail="waiting for Home Assistant to finish starting")
+    _set_state(state="waiting", detail="waiting for Home Assistant to finish starting")
     ha = ha_cec_integration()
     if ha:
-        cec_state.update(state="ha_integration", detail="Home Assistant's HDMI-CEC integration is active")
+        _set_state(state="ha_integration", detail="Home Assistant's HDMI-CEC integration is active")
         config.log_line("CEC: Home Assistant's HDMI-CEC integration is active; the app leaves CEC alone")
         return
     if ha is None:
@@ -151,7 +169,7 @@ def cec_setup(enabled):
     infos = read_infos()  # after the wait: the port as it is now
     usable = [(d, i) for d, i in infos if i]
     if not usable:
-        cec_state.update(state="error", detail=f"{config.CEC_CTL} failed on {', '.join(devs)}")
+        _set_state(state="error", detail=f"{config.CEC_CTL} failed on {', '.join(devs)}")
         return
     # The adapter of the connected port has a physical address (f.f.f.f = nothing connected).
     dev, info = next(
@@ -163,7 +181,7 @@ def cec_setup(enabled):
     except ValueError:
         used = False
     if used:
-        cec_state.update(
+        _set_state(
             state="in_use",
             device=dev,
             detail=f"already registered as '{osd}' (logical address mask {mask})",
@@ -177,12 +195,12 @@ def cec_setup(enabled):
         return
     code, out = _cec(dev, "--playback", f"--osd-name={CEC_NAME}")
     if code:
-        cec_state.update(state="error", device=dev, detail=(out.strip().splitlines() or ["registration failed"])[-1])
-        config.log_line(f"CEC: registration on {dev} failed: {cec_state['detail']}")
+        _set_state(state="error", device=dev, detail=(out.strip().splitlines() or ["registration failed"])[-1])
+        config.log_line(f"CEC: registration on {dev} failed: {_state['detail']}")
         return
     code, out = _cec(dev, "-S", timeout=60)
     devices, topo = parse_cec_topology(out)
-    cec_state.update(
+    _set_state(
         state="active",
         device=dev,
         phys=_cec_field(info, "Physical Address"),
@@ -222,7 +240,7 @@ handlers = {"key": lambda k: None, "standby": lambda: None, "shown": lambda ours
 
 def cec_send(*args):
     """Send a CEC message with cec-ctl (in the background; the answer is logged with the CEC messages)."""
-    dev = cec_state.get("device")
+    dev = _state.get("device")
     if not dev:
         return
 
@@ -242,8 +260,8 @@ def cec_send(*args):
 def cec_active_source():
     """Announce the app as the active source (CEC "One Touch Play"), as a playback device does when it starts
     playing."""
-    if cec_state.get("state") == "active" and cec_state.get("phys"):
-        cec_send(f"--active-source=phys-addr={cec_state['phys']}")
+    if _state.get("state") == "active" and _state.get("phys"):
+        cec_send(f"--active-source=phys-addr={_state['phys']}")
 
 
 def cec_parse(line):
@@ -265,9 +283,9 @@ def cec_parse(line):
         pm = re.search(r"^\s*(?:new-)?phys-addr:\s*([0-9a-fA-F.]+)", line)
         if pm:
             msg, _cec_rx["msg"] = _cec_rx["msg"], None
-            if msg == "SET_STREAM_PATH" and cec_state.get("phys") and pm[1] == cec_state["phys"]:
+            if msg == "SET_STREAM_PATH" and _state.get("phys") and pm[1] == _state["phys"]:
                 cec_send(f"--active-source=phys-addr={pm[1]}")
-            handlers["shown"](bool(cec_state.get("phys")) and pm[1] == cec_state["phys"])
+            handlers["shown"](bool(_state.get("phys")) and pm[1] == _state["phys"])
         return
     m = re.search(r"ui-cmd:.*\((0x[0-9a-fA-F]+)\)", line)
     if m and _cec_rx["msg"] == "USER_CONTROL_PRESSED":

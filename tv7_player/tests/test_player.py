@@ -86,7 +86,7 @@ def fake_mpv(tmp_path, monkeypatch):
 def test_video_output_without_display(fake_mpv):
     fake_mpv("#!/bin/bash\n[ \"$1\" = --hwdec=help ] && printf '  drm (hevc-drm)\\n'\nexit 0\n")
     mpvhost.setup_video({}, [])
-    assert display.VIDEO["vo"] == "drm" and display.VIDEO["pending"] == "yes", (
+    assert display.video_state()["vo"] == "drm" and display.video_state()["pending"] == "yes", (
         "plain DRM for now, the choice is pending"
     )
     assert display.hdmi_card("") == ("/dev/dri/card1", "card1-HDMI-A-1"), "Pi 5: card1, not card0"

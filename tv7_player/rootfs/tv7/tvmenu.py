@@ -117,7 +117,7 @@ def menu_items(tab):
         k = spec["key"]
         if spec["nerd"] and not menu["nerd"] and str(vals.get(k)) == str(settings.DEFAULTS.get(k)):
             continue  # technical: only in nerd mode, or when changed (like the web UI)
-        locked = k == "cec" and cec.cec_state["state"] in cec.CEC_LOCKED
+        locked = k == "cec" and cec.locked() is not None
         out.append(
             {
                 "kind": "item",
@@ -134,8 +134,8 @@ def menu_items(tab):
         {
             "kind": "item",
             "label": L["tech"],
-            "right": L["on"] if tvinfo.osd_state["on"] else L["off"],
-            "mark": tvinfo.osd_state["on"],
+            "right": L["on"] if tvinfo.is_on() else L["off"],
+            "mark": tvinfo.is_on(),
             "act": ("tech", None),
         },
         {
@@ -410,7 +410,7 @@ def menu_activate():
         mpvclient.mpv("set_property", act, arg)
         render_menu()
     elif act == "tech":
-        tvinfo.set_osd(not tvinfo.osd_state["on"], tvdraw.lang())
+        tvinfo.set_osd(not tvinfo.is_on(), tvdraw.lang())
         render_menu()
     elif act == "nerd":
         menu["nerd"] = not menu["nerd"]
@@ -481,6 +481,12 @@ def play_async(ch, source="auto"):
                 show_banner(ch, "ok" if res["ok"] else "failed")
 
     player.play(ch, source, wait=False, done=done)
+
+
+def menu_view():
+    """What /key reports: whether the menu is open, and its tab."""
+    with _menu_lock:
+        return {"menu": menu["open"], "tab": TABS[menu["tab"]] if menu["open"] else None}
 
 
 def logo_ready():
@@ -564,7 +570,7 @@ def handle_key(key):
         elif key in ("ch_up", "ch_down"):
             zap(1 if key == "ch_up" else -1)
         elif key == "info":
-            tvinfo.set_osd(not tvinfo.osd_state["on"], tvdraw.lang())
+            tvinfo.set_osd(not tvinfo.is_on(), tvdraw.lang())
         elif key == "stop":
             player.stop_playback(wait=False)
         elif key == "play" and not player.state.current["pk"] and player.state.last_played:

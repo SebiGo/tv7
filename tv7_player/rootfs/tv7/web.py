@@ -46,7 +46,7 @@ def status_view():
         "autostopped": dict(player.state.autostopped) or None,
         "hdmi_stopped": {"channel": player.state.hdmi_stopped["name"]} if player.state.hdmi_stopped else None,
         "pending_restart": settings.pending_restart(),
-        "osd": tvinfo.osd_state["on"],
+        "osd": tvinfo.is_on(),
     }
 
 
@@ -96,8 +96,7 @@ def get_key(h, q):
     if k not in cec.KEYS:
         raise ValueError("k: " + ", ".join(sorted(cec.KEYS)))
     tvmenu.handle_key(k)
-    menu = tvmenu.menu
-    return 200, {"menu": menu["open"], "tab": tvmenu.TABS[menu["tab"]] if menu["open"] else None}
+    return 200, tvmenu.menu_view()
 
 
 def get_volume(h, q):
@@ -125,7 +124,7 @@ def get_osd(h, q):
     if "on" in q:
         on = _arg(q, "on", ("1", "0"))
         return 200, tvinfo.set_osd(on == "1", q.get("lang", [""])[0][:2].lower() or None)
-    return 200, {"on": tvinfo.osd_state["on"]}
+    return 200, {"on": tvinfo.is_on()}
 
 
 def get_icon(h, q):

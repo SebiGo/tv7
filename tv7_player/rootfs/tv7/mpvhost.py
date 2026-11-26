@@ -70,7 +70,7 @@ def setup_video(opts, drm_args):
     )
     port = "" if opts.get("hdmi_port", "auto") == "auto" else opts.get("hdmi_port")
     mode, note = display.resolve_mode(str(opts.get("video_mode", "auto")), port)
-    display.VIDEO.update(vo=vo, pending=pending, hw="yes" if hw else "no", mode=mode, extra=extra, msg=msg)
+    display.set_video(vo=vo, pending=pending, hw="yes" if hw else "no", mode=mode, extra=extra, msg=msg)
     config.log_line(f"Video mode: {opts.get('video_mode', 'auto')} -> drm-mode={mode}" + (f" ({note})" if note else ""))
     config.log_line(
         f"Video output: {vo}"
@@ -167,7 +167,7 @@ def before_start(opts, drm_args):
     """Before every start of mpv: make a pending video output choice once a display is there, and make the overlay
     planes opaque (mpv draws its OSD there and does not set their alpha; a value another program left there makes the
     OSD nearly invisible)."""
-    if display.VIDEO["pending"] == "yes" and display.hdmi_ok():
+    if display.video_state()["pending"] == "yes" and display.hdmi_ok():
         setup_video(opts, drm_args)
     try:
         done = display.fix_planes()
@@ -234,12 +234,11 @@ def run_player():
     base = mpv_base_args(opts, drm_args, connector)
 
     def build():
-        args = base + display.VIDEO["extra"] + [f"--drm-mode={display.VIDEO['mode']}"]
-        if display.VIDEO["override"]:
-            config.log_line(
-                f"Output mode override (follows the stream's frame rate): drm-mode={display.VIDEO['override']}"
-            )
-            args.append(f"--drm-mode={display.VIDEO['override']}")
+        video = display.video_state()
+        args = base + video["extra"] + [f"--drm-mode={video['mode']}"]
+        if video["override"]:
+            config.log_line(f"Output mode override (follows the stream's frame rate): drm-mode={video['override']}")
+            args.append(f"--drm-mode={video['override']}")
         return args
 
     supervise_mpv(build, lambda: before_start(opts, drm_args))

@@ -253,7 +253,7 @@ def resolve_mode(video_mode, port, modes=None):
 
 def current_drm_mode():
     """The output mode chosen to follow the stream's frame rate (mpv is started with it), or "" if none."""
-    return VIDEO["override"]
+    return _video["override"]
 
 
 def mode_for_fps(fps, video_mode, port, modes=None):
@@ -287,7 +287,7 @@ def mode_for_fps(fps, video_mode, port, modes=None):
 # hw: H.265 is decoded in hardware; mode: the drm-mode mpv was started with; override: the output mode that follows the
 # stream's frame rate. Tests and the dev server attach to an mpv started by someone else and set the start values
 # (config.VIDEO_START).
-VIDEO = {
+_video = {
     "vo": None,
     "pending": "no",
     "hw": config.HW_AVAILABLE,
@@ -296,11 +296,17 @@ VIDEO = {
     "extra": [],
     "msg": "",
 }
-VIDEO.update(config.VIDEO_START)
+_video.update(config.VIDEO_START)
 
 
 def video_state():
-    return {k: VIDEO[k] for k in ("vo", "pending", "hw", "mode")}
+    """The video output state (see _video). Callers get the current dict; set_video replaces it as a whole."""
+    return _video
+
+
+def set_video(**values):
+    global _video
+    _video = {**_video, **values}
 
 
 def hw_available():
@@ -309,7 +315,7 @@ def hw_available():
 
 def set_mode_override(mode):
     """The output mode mpv gets at its next start (follows the stream's frame rate); "" for none."""
-    VIDEO["override"] = str(mode)
+    set_video(override=str(mode))
 
 
 def _read_all(pattern):

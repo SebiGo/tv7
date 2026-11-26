@@ -106,6 +106,11 @@ Hooks (set in `control.py`):
 | `mpvclient.on_idle` | `tvinfo.playback_ended` | playback ended: remove the technical info at once |
 | `tvdraw.on_logo_ready` | `tvmenu.logo_ready` | a channel logo is converted: draw the menu or banner again |
 
+**Shared state:** every piece of state that several threads use has one owner module, the only one that changes it.
+The owner replaces a dict as a whole instead of changing it in place (`player.state`, `display.video_state()`,
+`cec.state()`), or changes it under its own lock (`settings`, `init7`); other modules read it through the owner's
+functions (`tvinfo.is_on()`, `cec.locked()`, `tvmenu.menu_view()`), never by reaching into its dicts.
+
 **Playback state:** `player.state` holds what plays, the last start (support text), the last channel (play key) and the
 notes of automatic stops. Only `player` changes it; everything else reads it. Every change of what plays goes through
 `player.player(...)`, one worker thread, so the web UI, the TV menu, CEC and the watcher never overlap. `player.play()` is

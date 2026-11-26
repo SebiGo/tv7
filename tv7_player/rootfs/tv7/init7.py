@@ -17,6 +17,9 @@ from tv7 import config
 HLS_PREFIXES = ("https://api.tv.init7.net/", "https://vtvapi03.sys.init7.net/")
 CACHE_S = 300  # the channel lists are fetched again after this
 UDP_OPTS = "fifo_size=65536&overrun_nonfatal=1"  # FFmpeg UDP input options for multicast
+# the loaded lists and the notes of the last loads: replaced or changed only under _lock (the background load
+# writes them while requests read them)
+_lock = threading.Lock()
 _cache = {"t": 0.0, "data": [], "srg": []}
 # channel list sync state (support text)
 _sync = {
@@ -30,8 +33,10 @@ _sync = {
 
 def sync_info():
     """The channel lists for the support text: channel counts (srg None when the list is off) and the last sync."""
-    srg = len(_cache["srg"]) if config.SRG_FHD else None
-    return {"tv7": sum(1 for c in _cache["data"] if c.get("list") == "tv7"), "srg": srg, **_sync}
+    with _lock:
+        cache, sync = _cache, dict(_sync)
+    srg = len(cache["srg"]) if config.SRG_FHD else None
+    return {"tv7": sum(1 for c in cache["data"] if c.get("list") == "tv7"), "srg": srg, **sync}
 
 
 def logo_file(url):
@@ -134,10 +139,16 @@ def srg_fhd_channels():
 _refresh_lock = threading.Lock()  # one load at a time
 
 
+def _note(**values):
+    with _lock:
+        _sync.update(values)
+
+
 def _refresh():
     """Load the channel lists from Init7 (TV7, plus SRG Full HD). On a network error the last loaded lists stay; without
     any list it raises."""
-    _sync["tried"] = time.time()
+    global _cache
+    _note(tried=time.time())
     try:
         out, url = [], config.INIT7_API
         while url:
@@ -150,15 +161,16 @@ def _refresh():
         if config.SRG_FHD:
             try:
                 srg = srg_fhd_channels()
-                _sync.update(srg_ok=time.time(), srg_error=None)
+                _note(srg_ok=time.time(), srg_error=None)
             except Exception as e:
-                _sync["srg_error"] = str(e)  # keep the last SRG list; TV7 must not depend on it
+                _note(srg_error=str(e))  # keep the last SRG list; TV7 must not depend on it
         else:
             srg = []
-        _cache.update(t=time.time(), data=tv7 + srg, srg=srg)
-        _sync.update(tv7_ok=time.time(), tv7_error=None)
+        with _lock:
+            _cache = {"t": time.time(), "data": tv7 + srg, "srg": srg}
+        _note(tv7_ok=time.time(), tv7_error=None)
     except Exception as e:
-        _sync["tv7_error"] = str(e)
+        _note(tv7_error=str(e))
         if not _cache["data"]:
             raise RuntimeError(f"Init7 channel list not reachable: {e}") from e
 

@@ -52,7 +52,7 @@ def environment():
             for k, v in display.drm_modes().items()
         },
         "options": opts,
-        "cec": dict(cec.cec_state),
+        "cec": cec.state(),
         "choices": {
             "hdmi_port": ["auto"] + [p["name"] for p in ports],
         },
@@ -262,7 +262,7 @@ def nerd():
             "video": display.video_state(),
         },
         "log": mpvclient.mpv_log(),
-        "cec": {"state": cec.cec_state["state"], "device": cec.cec_state["device"], "log": cec.cec_log()},
+        "cec": {"state": cec.state()["state"], "device": cec.state()["device"], "log": cec.cec_log()},
     }
 
 
