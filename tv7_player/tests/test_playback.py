@@ -164,3 +164,43 @@ def test_missing_parameters_and_unknown_endpoints(app):
         assert c == 400 and "missing" in d["error"], (path, d)
     assert app.get("/nothing")[0] == 404
     assert app.get("/track?type=video&id=1")[1]["error"] == "type: audio or sub"
+
+
+def _in_background(fn, *args):
+    out = {}
+    t = threading.Thread(target=lambda: out.update(res=fn(*args), t=time.time()), daemon=True)
+    t.start()
+    return t, out
+
+
+def test_stop_cancels_a_hanging_start(app, world):
+    """A stop does not wait until a start that gets nowhere has tried every source (here 4 x 2 s)."""
+    world.ready(scenario="never")
+    try:
+        t, started = _in_background(app.get, "/play?channel=SRF%201")
+        time.sleep(0.6)
+        t0 = time.time()
+        assert app.get("/stop")[0] == 200
+        stopped = time.time()
+        t.join(5)
+    finally:
+        world.ready()
+    assert stopped - t0 < 2, f"the stop waited {stopped - t0:.1f} s"
+    c, d = started["res"]
+    assert c == 409 and d.get("reason") == "cancelled" and any("cancelled" in x for x in d["log"]), d
+
+
+def test_new_start_replaces_a_hanging_start(app, world):
+    world.ready(scenario="multicast_fails")
+    try:
+        t, first = _in_background(app.get, "/play?channel=SRF%201&source=multicast")
+        time.sleep(0.6)
+        t0 = time.time()
+        c, d = app.get("/play?channel=SRF%20zwei&source=hls")
+        took = time.time() - t0
+        t.join(5)
+    finally:
+        world.ready()
+    assert c == 200 and d["channel"] == "SRF zwei" and took < 3, (c, d, took)
+    assert first["res"][0] == 409, first["res"]
+    assert app.get("/status")[1]["channel"] == "SRF zwei"

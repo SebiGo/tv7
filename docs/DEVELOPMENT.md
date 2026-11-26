@@ -109,7 +109,9 @@ Hooks (set in `control.py`):
 **Playback state:** `player.state` holds what plays, the last start (support text), the last channel (play key) and the
 notes of automatic stops. Only `player` changes it; everything else reads it. Every change of what plays goes through
 `player.player(...)`, one worker thread, so the web UI, the TV menu, CEC and the watcher never overlap. `player.play()` is
-a start someone asked for; it clears the notes of automatic stops and keeps the result for the support text.
+a start someone asked for; it clears the notes of automatic stops and keeps the result for the support text. Every start
+and stop takes a wish number when it is asked for (before it waits in the queue); a start that is still waiting for its
+stream gives up as soon as a newer wish exists, so a stop or another channel never waits behind it (`/play` then answers 409).
 
 ## Layout
 - `tv7_player/rootfs/control.py` the start (production: starts and supervises mpv; with `<socket> <port>` it attaches to an mpv started by someone else: tests, `dev/run-web.sh`). The code is in the package `tv7_player/rootfs/tv7/` (layers above): `config` (version, paths, texts), `init7` (channel lists, Init7-only stream addresses, logos, favorites), `supervisor` (Supervisor API: options, restart, log, versions, Core config), `mpvclient` (mpv IPC, log, change notifications), `png` (PNG decoder for the logos), `hwdec` (hardware decoder per device), `display` (HDMI, modes, planes, deinterlacing), `cec` (HDMI-CEC bus), `settings` (options), `player` (channel start/stop on one worker thread, output mode that follows the stream, automatic stops and resumes), `mpvhost` (starting and supervising mpv, audio device), `system` (load, audio devices, nerd data), `tvdraw` (drawing on the TV, language of the TV texts, logo cache), `tvinfo` (technical info on the TV), `tvmenu` (menu, banner, remote keys), `support` (support text), `web` (API, web UI, `/events`).

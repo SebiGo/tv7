@@ -4,6 +4,7 @@ the automatic stops and resumes (HDMI display gone, no operation, TV switched aw
 The playback state is `state`. Only this module changes it; the web UI, the TV menu and the support text read it."""
 
 import concurrent.futures
+import itertools
 import threading
 import time
 from dataclasses import dataclass, field
@@ -35,14 +36,33 @@ state = Playback()
 
 # resume(ch, source): starts a channel again after the TV showed another source. control.py sets it to the TV menu's
 # start, which shows the channel banner; without it the channel starts in the background.
-handlers = {"resume": lambda ch, source: player(_play, ch, source, wait=False)}
+handlers = {"resume": lambda ch, source: play(ch, source, wait=False)}
 
 
 def _clear_current():
     state.current.update(pk=None, name=None, source=None)
 
 
+# Every wish that replaces what plays (a start, a stop) takes the next number when it is asked for, before it waits in
+# the queue. A start checks the number while it waits for the stream and gives up as soon as a newer wish exists, so a
+# stop or another channel never waits behind a start that does not get anywhere.
+_wishes = itertools.count(1)
+_wish_lock = threading.Lock()
+_latest_wish = {"n": 0}
+
+
+def _new_wish():
+    with _wish_lock:
+        n = _latest_wish["n"] = next(_wishes)
+    return n
+
+
+def _superseded(n):
+    return n is not None and _latest_wish["n"] != n
+
+
 def stop_playback(wait=True):
+    _new_wish()
     return player(_stop_playback, wait=wait)
 
 
@@ -107,18 +127,27 @@ def player(fn, *args, wait=True):
     return _player_pool.submit(logged)
 
 
-def play(ch, source="auto"):
+def play(ch, source="auto", wait=True, done=None):
     """A start someone asked for (web UI, API, TV menu, resume after CEC): clears the notes of automatic stops and keeps
-    the result and log for the support text. Returns {"ok", "channel", "source", "log", ...}."""
-    return player(_play, ch, source)
+    the result and log for the support text. Returns {"ok", "channel", "source", "log", ...}; "reason": "cancelled"
+    when a newer start or a stop came first. wait=False returns at once; done(result) is then called on the worker."""
+    n = _new_wish()
+
+    def run():
+        res = _play(ch, source, n)
+        if done:
+            done(res)
+        return res
+
+    return player(run, wait=wait)
 
 
-def _play(ch, source):
+def _play(ch, source, n=None):
     t0 = time.time()
     state.hdmi_stopped.clear()
     state.autostopped.clear()
     try:
-        res = _start_channel(ch, source)
+        res = _start_channel(ch, source, n)
     except Exception as e:
         res = {"ok": False, "channel": ch.get("name"), "log": [f"{type(e).__name__}: {e}"]}
     state.last_start = {"t": t0, "seconds": round(time.time() - t0, 1), "requested": source, **res}
@@ -127,11 +156,11 @@ def _play(ch, source):
 
 def start(ch, source):
     """Start a channel without touching the notes of automatic stops (the HDMI watcher resumes with this)."""
-    return player(_start_channel, ch, source)
+    return player(_start_channel, ch, source, _new_wish())
 
 
-def _start_channel(ch, source):
-    res = _start(ch, source)
+def _start_channel(ch, source, n=None):
+    res = _start(ch, source, n)
     if res.get("ok"):
         state.last_played.update(pk=ch["pk"], source=res.get("source"))
         state.tv_away_since = None
@@ -140,8 +169,15 @@ def _start_channel(ch, source):
     return res
 
 
-def _start(ch, source):
+def _start(ch, source, n=None):
+    """Try the sources of a channel (multicast, then HLS), two attempts each. n: the wish this start belongs to (see
+    _new_wish); a newer wish ends it."""
     log = []
+
+    def cancelled():
+        log.append("cancelled: a newer start or a stop was asked for")
+        return {"ok": False, "channel": ch["name"], "log": log, "reason": "cancelled"}
+
     if display.connectors() and not display.hdmi_ok():
         log.append("HDMI: no display connected (cable, TV off or on another input?); starting anyway")
     # chosen without a display: choose the video output now
@@ -154,11 +190,15 @@ def _start(ch, source):
             log.append(f"{src}: {e}")
             continue
         for attempt in (1, 2):
+            if _superseded(n):
+                return cancelled()
             # every channel starts without subtitles (track picker turns them on)
             mpvclient.mpv("set_property", "sid", "no")
             mpvclient.mpv("loadfile", url, "replace")
             end = time.time() + config.START_TIMEOUT
             while time.time() < end:
+                if _superseded(n):
+                    return cancelled()
                 if mpvclient.playing():
                     log.append(f"{src}: started (attempt {attempt})")
                     state.current.update(pk=ch["pk"], name=ch["name"], source=src)

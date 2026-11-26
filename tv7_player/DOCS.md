@@ -91,6 +91,7 @@ script:
 ## Good to know
 - The channel list comes live from Init7; new channels appear without an update.
 - If the TV was off when the app started, the first channel takes a few seconds longer.
+- A channel that is still starting stops at once when you press stop or choose another channel.
 
 ## Problems
 - **No sound:** check that the TV or receiver is on the right HDMI input and not muted. Then switch on **Nerd mode** and look at the audio devices in **Settings**: an HDMI device should be marked active. If none is, restart the app; if there is still no sound, send a bug report (see below).
@@ -178,6 +179,7 @@ Ein Beispiel mit `rest_command` und `script` steht im englischen Abschnitt.
 ## Gut zu wissen
 - Die Senderliste kommt live von Init7; neue Sender erscheinen ohne Update.
 - War der Fernseher beim Start der App aus, dauert der erste Senderstart ein paar Sekunden länger.
+- Ein Sender, der noch startet, bricht sofort ab, wenn du Stopp drückst oder einen anderen Sender wählst.
 
 ## Probleme
 - **Kein Ton:** prüfen, ob Fernseher oder Receiver auf dem richtigen HDMI-Eingang und nicht stumm sind. Dann den **Nerd-Modus** einschalten und unter **Einstellungen** die Audiogeräte ansehen: Ein HDMI-Gerät sollte als aktiv markiert sein. Ist keines aktiv, die App neu starten; bleibt es still, einen Fehler melden (siehe unten).
@@ -259,6 +261,7 @@ Un exemple avec `rest_command` et `script` figure dans la section anglaise.
 ## Bon à savoir
 - La liste des chaînes vient en direct d'Init7 ; les nouvelles chaînes apparaissent sans mise à jour.
 - Si le téléviseur était éteint au démarrage de l'application, la première chaîne met quelques secondes de plus à démarrer.
+- Une chaîne encore en train de démarrer s'arrête aussitôt si vous appuyez sur stop ou choisissez une autre chaîne.
 
 ## Problèmes
 - **Pas de son :** vérifiez que le téléviseur ou le récepteur est sur la bonne entrée HDMI et pas en sourdine. Activez ensuite le **mode nerd** et regardez les périphériques audio dans **Réglages** : un périphérique HDMI devrait être marqué actif. Si aucun ne l'est, redémarrez l'application ; s'il n'y a toujours pas de son, signalez le problème (voir ci-dessous).
@@ -340,6 +343,7 @@ Un esempio con `rest_command` e `script` si trova nella sezione inglese.
 ## Da sapere
 - L'elenco dei canali arriva in diretta da Init7; i nuovi canali compaiono senza aggiornamenti.
 - Se il televisore era spento all'avvio dell'app, il primo canale impiega qualche secondo in più.
+- Un canale che sta ancora partendo si ferma subito se premi stop o scegli un altro canale.
 
 ## Problemi
 - **Niente audio:** controlla che il televisore o il ricevitore sia sull'ingresso HDMI giusto e non in muto. Poi attiva la **modalità nerd** e guarda i dispositivi audio in **Impostazioni**: un dispositivo HDMI dovrebbe essere segnato come attivo. Se nessuno lo è, riavvia l'app; se l'audio manca ancora, segnala l'errore (vedi sotto).

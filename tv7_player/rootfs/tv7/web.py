@@ -82,7 +82,8 @@ def get_play(h, q):
         raise ValueError("source: auto, multicast or hls")
     player.touch()
     res = player.play(init7.find_channel(channel), src)
-    return (200 if res["ok"] else 502), res
+    code = 200 if res["ok"] else 409 if res.get("reason") == "cancelled" else 502
+    return code, res
 
 
 def get_stop(h, q):

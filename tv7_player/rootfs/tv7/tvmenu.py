@@ -474,13 +474,14 @@ def play_async(ch, source="auto"):
     """Start a channel from the remote control without blocking the keys; the banner shows progress and result."""
     show_banner(ch, "starting", seconds=120)
 
-    def run():
-        res = player.play(ch, source)
+    def done(res):
+        if res.get("reason") == "cancelled":
+            return  # a newer start or a stop took over the banner
         with _menu_lock:
             if banner["ch"] is ch:
                 show_banner(ch, "ok" if res["ok"] else "failed")
 
-    player.player(run, wait=False)
+    player.play(ch, source, wait=False, done=done)
 
 
 def logo_ready():
