@@ -1,5 +1,5 @@
 {
-  // Web server development: no hardware. Run `dev/run-web.sh` (fake mpv) and open http://localhost:8099; tests: `python3 tv7_player/tests/test_control.py`.
+  // Web server development: no hardware. Run `dev/run-web.sh` (fake mpv) and open http://localhost:8099; tests: `cd tv7_player && python3 -m pytest`.
   "name": "TV7 Player (web)",
   "build": { "dockerfile": "../Dockerfile", "context": ".." },
   "workspaceFolder": "/workspaces/tv7-player",

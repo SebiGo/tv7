@@ -23,7 +23,7 @@ profile tv7_player flags=(attach_disconnected,mediate_deleted) {
   network unix,
   network netlink raw,
 
-  # Signals within the app (supervise.sh, timeout) and from Docker when the app is stopped.
+  # Signals within the app (mpv supervision in control.py, timeout) and from Docker when the app is stopped.
   signal (send, receive) peer=@{profile_name},
   signal (receive) peer=unconfined,
   # Reading /proc/<pid>/stat of mpv for its CPU load.

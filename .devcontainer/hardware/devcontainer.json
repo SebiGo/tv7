@@ -7,7 +7,7 @@
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/tv7-player,type=bind",
   "runArgs": ["--network=host", "--privileged", "--device=/dev/dri", "--device=/dev/snd"],
   // run.sh expects the add-on's image layout: files in /, options in /data/options.json.
-  "postCreateCommand": "for f in run.sh supervise.sh control.py ui.html ui-logo.png; do ln -sf /workspaces/tv7-player/tv7_player/rootfs/$f /$f; done; ln -sfn /workspaces/tv7-player/tv7_player/translations /translations; mkdir -p /data && echo '{}' > /data/options.json",
+  "postCreateCommand": "for f in /workspaces/tv7-player/tv7_player/rootfs/*; do ln -sfn $f /$(basename $f); done; ln -sfn /workspaces/tv7-player/tv7_player/translations /translations; mkdir -p /data && echo '{}' > /data/options.json",
   "forwardPorts": [8099],
   "customizations": { "vscode": { "extensions": ["ms-python.python", "timonwong.shellcheck"] } }
 }

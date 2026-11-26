@@ -1,0 +1,13 @@
+# Python lint and format (ruff): `ruff check` and `ruff format --check` in CI, `ruff format` before a commit.
+target-version = "py313"
+line-length = 120
+
+[lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+
+[lint.per-file-ignores]
+# test data (fake cec-ctl, modetest output, DRM planes) stays as the real programs print it
+"tv7_player/tests/*" = ["E501"]
+
+[lint.isort]
+known-first-party = ["tv7", "mock_mpv", "fakes"]

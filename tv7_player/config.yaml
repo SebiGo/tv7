@@ -1,6 +1,6 @@
 ---
 name: "TV7 Player"
-version: "0.0.1"
+version: "0.0.2-rc.1"
 slug: tv7_player
 description: "Watch Init7 TV7 and the SRG Full HD channels on the TV connected to your Home Assistant device."
 url: "https://github.com/SebiGo/tv7"
@@ -20,8 +20,8 @@ boot: auto
 host_network: true
 # Only the devices the player needs (protection mode stays on; device paths a host does not have are skipped):
 # DRM/KMS output and GPU (dri), buffers for the Raspberry Pi hardware decoder (dma_heap), V4L2 media controllers of the
-# decoders (media), and the ALSA nodes for audio_output: alsa. video: true adds the V4L2 decoders (/dev/video*),
-# audio: true the PulseAudio socket of Home Assistant.
+# decoders (media), and the ALSA nodes (sound when Home Assistant's PulseAudio has no HDMI output). video: true adds
+# the V4L2 decoders (/dev/video*), audio: true the PulseAudio socket of Home Assistant.
 devices:
   - /dev/dri/card0
   - /dev/dri/card1
@@ -46,35 +46,17 @@ audio: true
 video: true
 options:
   hdmi_port: auto
-  hdmi_disconnect: resume
   cec: auto
   video_mode: auto
-  video_refresh: auto
-  deinterlace: true
-  hardware_decoding: auto
-  video_output: auto
   decode_speed: quality
-  audio_output: auto
-  audio_device: ""
-  audio_language: auto
   audio_channels: auto
-  start_volume: 100
   idle_stop: "off"
   debug: false
 schema:
   hdmi_port: list(auto|HDMI-A-1|HDMI-A-2)
-  hdmi_disconnect: list(resume|stop|keep)
   cec: list(auto|off)
   video_mode: list(auto|highest|2160p|1080p|720p)
-  video_refresh: list(auto|50|60)
-  deinterlace: bool
-  hardware_decoding: list(auto|no)
-  video_output: list(auto|drm|gpu)
   decode_speed: list(quality|fast)
-  audio_output: list(auto|pulseaudio|alsa)
-  audio_device: str?
-  audio_language: list(auto|deu|fra|ita|eng|roh)
   audio_channels: list(auto|stereo)
-  start_volume: int(0,130)
   idle_stop: list(off|60|120|180|240|480)
   debug: bool

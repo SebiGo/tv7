@@ -2,3 +2,5 @@ data/
 __pycache__/
 CLAUDE.md
 TODO.md
+.pytest_cache/
+.ruff_cache/
