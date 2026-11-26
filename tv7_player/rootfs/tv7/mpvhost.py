@@ -222,8 +222,8 @@ def run_player():
         os.makedirs("/root/.config/pulse", exist_ok=True)
         with open("/root/.config/pulse/client.conf", "w") as f:
             f.write("autospawn = no\n")
-    except OSError:
-        pass
+    except Exception as e:
+        config.log_once("PulseAudio client configuration", e)
     wait_hdmi()
     port = "" if opts.get("hdmi_port", "auto") == "auto" else opts.get("hdmi_port")
     device, connector = display.hdmi_card(port)

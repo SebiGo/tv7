@@ -37,8 +37,8 @@ def update_deinterlace():
             mpvclient.mpv("set_property", "deinterlace", False)
         elif mpvclient.mpv("set_property", "deinterlace", "auto").get("error") != "success":
             mpvclient.mpv("set_property", "deinterlace", True)
-    except Exception:
-        pass
+    except Exception as e:
+        config.log_once("Deinterlacing", e)
 
 
 def hdmi_ports():
@@ -170,8 +170,8 @@ def drm_modes():
         found = {k: v for k, v in parse_modetest(r.stdout).items() if "HDMI" in k and v}
         if found:
             return found
-    except Exception:
-        pass
+    except Exception as e:
+        config.log_once("modetest (falling back to the modes in sysfs)", e)
     out = {}
     for p in hdmi_ports():
         modes = []
@@ -318,7 +318,7 @@ def _read_all(pattern):
         try:
             out.append(open(f).read())
         except OSError:
-            pass
+            pass  # a name file that cannot be read: that device has no name
     return "".join(out)
 
 

@@ -140,8 +140,8 @@ def _convert_logo(url):
     for fn in on_logo_ready:  # the menu or banner shows it now if it is still up
         try:
             fn()
-        except Exception:
-            pass
+        except Exception as e:
+            config.log_once("Drawing a logo", e)
 
 
 def place_logos(slots, placements):

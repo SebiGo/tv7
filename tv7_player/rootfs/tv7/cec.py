@@ -132,8 +132,8 @@ def cec_setup(enabled):
                 try:
                     _cec(d, "--clear")
                     config.log_line(f"CEC: option off, registration of the app on {d} removed")
-                except Exception:
-                    pass
+                except Exception as e:
+                    config.log_once("CEC: removing the app's registration", e)
         cec_state.update(state="off", device=None, detail=None, devices=[], topology=[])
         return
     if not devs:

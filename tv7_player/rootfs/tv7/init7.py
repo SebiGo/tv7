@@ -48,7 +48,7 @@ def logo_file(url):
     try:
         return open(path, "rb").read(), ctype
     except OSError:
-        pass
+        pass  # not cached yet
     with urllib.request.urlopen(url, timeout=10) as r:
         data = r.read(400001)
     if len(data) > 400000 or not data:
@@ -56,8 +56,8 @@ def logo_file(url):
     try:
         os.makedirs(config.LOGO_DIR, exist_ok=True)
         open(path, "wb").write(data)
-    except OSError:
-        pass
+    except Exception as e:
+        config.log_once("Logo cache", e)
     return data, ctype
 
 

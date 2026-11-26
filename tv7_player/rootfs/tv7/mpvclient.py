@@ -6,6 +6,8 @@ import socket
 import threading
 import time
 
+from tv7 import config
+
 SOCK = ""
 _ovl_conn = {"sock": None, "buf": b"", "id": 0}
 _ovl_conn_lock = threading.Lock()
@@ -44,7 +46,7 @@ def mpv_keep(cmd):
                     if c["sock"]:
                         c["sock"].close()
                 except OSError:
-                    pass
+                    pass  # the socket is gone already
                 c.update(sock=None, buf=b"")
                 if attempt == 2:
                     raise
@@ -143,8 +145,10 @@ def _log_reader():
                             _mpv_log.append(time.strftime("%H:%M:%S ") + text)
                             del _mpv_log[:-LOG_LINES]
             s.close()
-        except Exception:
-            pass
+        except (ConnectionError, FileNotFoundError):
+            pass  # mpv is (re)starting: connect again
+        except Exception as e:
+            config.log_once("mpv log reader", e)
         time.sleep(2)
 
 

@@ -103,7 +103,7 @@ def app_version():
         try:
             stamp = max(stamp, os.stat(f).st_mtime_ns)
         except OSError:
-            pass
+            pass  # a file that does not exist (yet) does not change the stamp
     return f"{VERSION}+{stamp}"
 
 
@@ -119,3 +119,19 @@ def ui_client_ok(addr):
 
 def log_line(msg):
     print(">>> " + msg, flush=True)  # goes to the app log
+
+
+_last_error = {}  # where -> text of the last error logged there
+
+
+def log_once(where, exc):
+    """Log an unexpected error of a step that runs again and again (every second, every status): once, and again only
+    when the error changes, so the app log stays readable. log_ok(where) after the step worked."""
+    text = f"{type(exc).__name__}: {exc}"
+    if _last_error.get(where) != text:
+        _last_error[where] = text
+        log_line(f"{where}: {text}")
+
+
+def log_ok(where):
+    _last_error.pop(where, None)

@@ -81,7 +81,7 @@ def restart_mpv(log, reason):
     try:
         mpvclient.mpv("quit")
     except Exception:
-        pass
+        pass  # mpv closes the connection when it quits
     end = time.time() + config.MODE_WAIT_S
     while time.time() < end:  # wait for the NEW mpv (different pid) to answer
         time.sleep(0.4)
@@ -220,8 +220,8 @@ def _start(ch, source, n=None):
                     log.append(f"{src}: the stream is received, but no display is connected to HDMI (no picture)")
                     try:
                         mpvclient.mpv("stop")
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        config.log_once("Stopping mpv", e)
                     return {"ok": False, "channel": ch["name"], "log": log, "reason": "no_display"}
                 time.sleep(0.5)
             log.append(f"{src}: attempt {attempt} did not start within {config.START_TIMEOUT:g} s")
@@ -293,8 +293,8 @@ def _hdmi_stop():
     state.hdmi_stopped.update(pk=cur["pk"], name=cur["name"], source=cur["source"], t=time.time())
     try:
         mpvclient.mpv("stop")
-    except Exception:
-        pass
+    except Exception as e:
+        config.log_once("Stopping mpv", e)
     _clear_current()
     config.log_line(
         f"No HDMI display for {config.HDMI_OFF_S:g} s: playback of {state.hdmi_stopped['name']} stopped, "
@@ -317,8 +317,8 @@ def _auto_stop(reason, text, extra):
     state.autostopped = {"reason": reason, "channel": state.current["name"], "t": time.time(), **extra}
     try:
         mpvclient.mpv("stop")
-    except Exception:
-        pass
+    except Exception as e:
+        config.log_once("Stopping mpv", e)
     _clear_current()
     state.hdmi_stopped.clear()
     config.log_line(text)

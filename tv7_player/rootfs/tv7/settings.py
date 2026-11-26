@@ -125,8 +125,8 @@ def labels(lang):
             d = yaml.safe_load(open(os.path.join(config.TRANSLATIONS, f"{code}.yaml")))["configuration"]
             for k, v in d.items():
                 out[k] = {"name": v.get("name", k), "description": v.get("description", "")}
-        except Exception:
-            pass
+        except Exception as e:
+            config.log_once("Option names (translations)", e)
     return out
 
 

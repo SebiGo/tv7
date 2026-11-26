@@ -148,8 +148,8 @@ def hide():
         try:
             for i in (OSD_ID, OSD_BG_ID):
                 mpvclient.mpv_named(name="osd-overlay", id=i, format="none", data="")
-        except Exception:
-            pass
+        except Exception as e:
+            config.log_once("Removing the technical info", e)
         osd_state.update(shown=False, rows=None)
 
 
@@ -160,6 +160,6 @@ def set_osd(on, lang=None):
     mpvclient.changed()
     try:
         osd_step()
-    except Exception:
-        pass
+    except Exception as e:
+        config.log_once("Technical info on the TV", e)
     return {"on": osd_state["on"]}

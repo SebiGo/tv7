@@ -4,7 +4,6 @@ Menu: OK opens it; up/down move, left/right switch tabs (channels, audio, subtit
 it closes by itself after config.MENU_TIMEOUT_S. Without the menu: channel up/down zap, digits choose a channel number,
 info toggles the technical info. Every channel start shows a banner."""
 
-import socket
 import threading
 import time
 
@@ -14,17 +13,17 @@ OSD_S = 1.0  # refresh interval of the overlay
 
 
 def osd_loop():
-    last_err = {}
+    """About once a second: refresh the technical info, close the menu and banner when their time is up."""
     while True:
         for step in (tvinfo.osd_step, menu_tick):
+            where = f"TV overlay ({step.__name__})"
             try:
                 step()
-                last_err.pop(step.__name__, None)
+                config.log_ok(where)
+            except (TimeoutError, ConnectionError, FileNotFoundError):
+                pass  # mpv is (re)starting; the next round draws again
             except Exception as e:
-                if last_err.get(step.__name__) != str(e):  # log each new error once, not every second
-                    last_err[step.__name__] = str(e)
-                    if not isinstance(e, (ConnectionError, FileNotFoundError, socket.timeout)):
-                        config.log_line(f"TV overlay ({step.__name__}): {type(e).__name__}: {e}")
+                config.log_once(where, e)
         time.sleep(OSD_S)
 
 

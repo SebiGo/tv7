@@ -15,7 +15,7 @@ def alsa_status():
         try:
             out.append(f.split("/proc/asound/")[1].split("/sub0")[0] + ": " + " ".join(open(f).read().split()))
         except Exception:
-            pass
+            pass  # the device was closed while reading
     return out
 
 
@@ -69,7 +69,7 @@ def _mpv_pid():
                 if open(f"/proc/{d}/comm").read().strip() == "mpv":
                     return int(d)
             except OSError:
-                pass
+                pass  # the process ended meanwhile
     return None
 
 
@@ -97,12 +97,12 @@ def system_load():
             out.update({k: v for k, v in prev.get("last", {}).items() if k in ("total", "mpv")})
         else:
             _cpu_prev.update(t=now, total=total, idle=idle, mj=mj, pid=pid, last={})
-    except Exception:
-        pass
+    except Exception as e:
+        config.log_once("CPU load", e)
     try:
         out["temp_c"] = round(int(open("/sys/class/thermal/thermal_zone0/temp").read()) / 1000.0, 1)
     except Exception:
-        pass
+        pass  # no temperature sensor on this device
     return out
 
 
@@ -133,8 +133,8 @@ def memory():
             k, v = line.split(":", 1)
             if k in ("MemTotal", "MemAvailable"):
                 out[k] = int(v.split()[0]) // 1024  # MiB
-    except Exception:
-        pass
+    except Exception as e:
+        config.log_once("Memory", e)
     return {"total_mib": out.get("MemTotal"), "available_mib": out.get("MemAvailable")}
 
 
