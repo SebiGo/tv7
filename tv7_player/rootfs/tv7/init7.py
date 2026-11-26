@@ -5,6 +5,7 @@ import ipaddress
 import json
 import os
 import re
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -130,45 +131,73 @@ def srg_fhd_channels():
     return out
 
 
-def channels(force=False):
-    """Current channel lists (TV7 from the Init7 config.INIT7_API, plus SRG Full HD); on a network error the last loaded
-    lists are used."""
-    if force or time.time() - _cache["t"] > CACHE_S or not _cache["data"]:
-        _sync["tried"] = time.time()
+_refresh_lock = threading.Lock()  # one load at a time
+
+
+def _refresh():
+    """Load the channel lists from Init7 (TV7, plus SRG Full HD). On a network error the last loaded lists stay; without
+    any list it raises."""
+    _sync["tried"] = time.time()
+    try:
+        out, url = [], config.INIT7_API
+        while url:
+            with urllib.request.urlopen(url, timeout=10) as r:
+                d = json.load(r)
+            out += d["results"]
+            url = d.get("next")
+        tv7 = [{**c, "list": "tv7"} for c in out if c.get("visible", True)]
+        srg = _cache["srg"]
+        if config.SRG_FHD:
+            try:
+                srg = srg_fhd_channels()
+                _sync.update(srg_ok=time.time(), srg_error=None)
+            except Exception as e:
+                _sync["srg_error"] = str(e)  # keep the last SRG list; TV7 must not depend on it
+        else:
+            srg = []
+        _cache.update(t=time.time(), data=tv7 + srg, srg=srg)
+        _sync.update(tv7_ok=time.time(), tv7_error=None)
+    except Exception as e:
+        _sync["tv7_error"] = str(e)
+        if not _cache["data"]:
+            raise RuntimeError(f"Init7 channel list not reachable: {e}") from e
+
+
+def _refresh_in_background():
+    def run():
         try:
-            out, url = [], config.INIT7_API
-            while url:
-                with urllib.request.urlopen(url, timeout=10) as r:
-                    d = json.load(r)
-                out += d["results"]
-                url = d.get("next")
-            tv7 = [{**c, "list": "tv7"} for c in out if c.get("visible", True)]
-            srg = _cache["srg"]
-            if config.SRG_FHD:
-                try:
-                    srg = srg_fhd_channels()
-                    _sync.update(srg_ok=time.time(), srg_error=None)
-                except Exception as e:
-                    _sync["srg_error"] = str(e)  # keep the last SRG list; TV7 must not depend on it
-            else:
-                srg = []
-            _cache.update(t=time.time(), data=tv7 + srg, srg=srg)
-            _sync.update(tv7_ok=time.time(), tv7_error=None)
-        except Exception as e:
-            _sync["tv7_error"] = str(e)
-            if not _cache["data"]:
-                raise RuntimeError(f"Init7 channel list not reachable: {e}") from e
+            _refresh()
+        except Exception:
+            pass  # recorded in _sync (support text); the next call tries again
+        finally:
+            _refresh_lock.release()
+
+    if _refresh_lock.acquire(blocking=False):  # a load is running already otherwise
+        threading.Thread(target=run, daemon=True).start()
+
+
+def channels(force=False, block=True):
+    """The channel lists. A list older than CACHE_S is returned at once and loaded again in the background, so a key
+    press or a page never waits for Init7. Only the first load and force (the web UI's "reload list") wait.
+    block=False never waits: before the first load it returns [] and starts loading (TV menu, which holds its lock)."""
+    if force or (block and not _cache["data"]):
+        with _refresh_lock:
+            if force or not _cache["data"]:
+                _refresh()
+    elif not _cache["data"] or time.time() - _cache["t"] > CACHE_S:
+        _refresh_in_background()
     return _cache["data"]
 
 
-def find_channel(sel):
-    """Find a channel by pk, number or name (exact match, otherwise a unique partial match)."""
+def find_channel(sel, block=True):
+    """Find a channel by pk, number or name (exact match, otherwise a unique partial match). block: see channels()."""
     sel = sel.strip()
     low = sel.lower()
-    for c in channels():
+    chs = channels(block=block)
+    for c in chs:
         if sel == c["pk"] or low == c["name"].lower() or sel == str(c.get("ordernum")):
             return c
-    hits = [c for c in channels() if low in c["name"].lower()]
+    hits = [c for c in chs if low in c["name"].lower()]
     if len(hits) == 1:
         return hits[0]
     raise KeyError(f"Channel '{sel}' not found" + (f" (ambiguous: {[h['name'] for h in hits][:5]})" if hits else ""))

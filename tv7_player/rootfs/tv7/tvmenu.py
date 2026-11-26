@@ -68,7 +68,7 @@ def menu_items(tab):
     L = tvdraw.labels()
     if TABS[tab] == "channels":
         try:
-            chs = init7.channels()
+            chs = init7.channels(block=False)
         except Exception:
             chs = []
         by, out = {c["pk"]: c for c in chs}, []
@@ -406,7 +406,7 @@ def menu_activate():
     L = tvdraw.labels()
     if act == "play":
         close_menu()
-        play_async(init7.find_channel(arg))
+        play_async(init7.find_channel(arg, block=False))
     elif act in ("aid", "sid"):
         mpvclient.mpv("set_property", act, arg)
         render_menu()
@@ -501,7 +501,7 @@ def resume(ch, source):
 
 def zap(d):
     try:
-        chs = init7.channels()
+        chs = init7.channels(block=False)
     except Exception:
         return
     cur = next((c for c in chs if c["pk"] == player.state.current["pk"]), None)
@@ -527,7 +527,7 @@ def _digit_commit():
     with _menu_lock:
         buf, digits["buf"], digits["timer"] = digits["buf"], "", None
         try:
-            ch = next((c for c in init7.channels() if str(c.get("ordernum")) == buf), None)
+            ch = next((c for c in init7.channels(block=False) if str(c.get("ordernum")) == buf), None)
         except Exception:
             ch = None
         if ch:
@@ -571,7 +571,8 @@ def handle_key(key):
         elif key == "play" and not player.state.current["pk"] and player.state.last_played:
             try:
                 play_async(
-                    init7.find_channel(player.state.last_played["pk"]), player.state.last_played.get("source") or "auto"
+                    init7.find_channel(player.state.last_played["pk"], block=False),
+                    player.state.last_played.get("source") or "auto",
                 )
             except KeyError:
                 pass

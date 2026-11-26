@@ -103,6 +103,7 @@ class World:
         self.sock, self.drm = f"{self.tmp}/mpv.sock", f"{self.tmp}/drm"
         self.state = {"scenario": "", "loaded": None, "t0": 0.0, "loads": 0, "cable": True}
         self.sup = {"options": None, "auth": None, "restarts": 0, "reject": False, "core": None}
+        self.api_delay = 0.0  # seconds the fake Init7 takes to answer
         self._channel_api()
         self._supervisor()
         self._hdmi()
@@ -149,8 +150,11 @@ class World:
 
     # --- Fake Init7: channel list, SRG Full HD lists, logos ---
     def _channel_api(self):
+        world = self
+
         class Api(BaseHTTPRequestHandler):
             def do_GET(self):
+                time.sleep(world.api_delay)
                 if self.path.startswith("/media/logos/"):
                     return _reply(self, 200, PNG, "image/png")
                 if self.path.startswith("/srg-"):

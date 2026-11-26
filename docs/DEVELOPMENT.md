@@ -128,5 +128,8 @@ stream gives up as soon as a newer wish exists, so a stop or another channel nev
 - **Watcher** (`player.watcher`): every 2 s checks the HDMI display, inactivity (`idle_stop`) and whether the TV switched away (CEC).
 - **TV overlay** (`tvmenu.osd_loop`): refreshes the technical info and closes the menu and banner after their time; `tvdraw.ha_language_loop` follows Home Assistant's language for the TV texts.
 - **CEC** (`cec.cec_setup`): registers the app on the HDMI-CEC bus, then reads the TV's messages (`cec-ctl -W`) and passes them to `cec.handlers`.
+- **Channel lists** (`init7`): loaded in the background at start and again when they are older than 5 minutes; callers get
+  the last lists at once and never wait for Init7, except for the first load and the web UI's "reload list". The TV menu
+  (`block=False`) does not wait at all.
 - **mpv log reader** (`mpvclient.mpv_log`): collects mpv's log for nerd mode and the support text.
 - **mpv supervision** (`mpvhost.run_player`, the main thread): starts mpv and starts it again when it exits.
