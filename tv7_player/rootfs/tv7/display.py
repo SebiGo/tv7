@@ -1,4 +1,5 @@
 """The display: HDMI connectors, output modes, planes, deinterlacing, hardware decoding per device, the output mode that follows the stream, the video output state, the PNG decoder for logos."""
+
 import glob
 import os
 import re
@@ -7,8 +8,7 @@ import zlib
 
 from tv7 import mpvclient, player, settings
 
-
-DRM_DIR = os.environ.get("TV7_DRM_DIR", "/sys/class/drm")      # overridable for tests
+DRM_DIR = os.environ.get("TV7_DRM_DIR", "/sys/class/drm")  # overridable for tests
 MODETEST = os.environ.get("TV7_MODETEST", "modetest")
 
 
@@ -44,7 +44,9 @@ def update_deinterlace():
     """Apply the deinterlace option where the current decoder allows it (see deinterlace_possible). "auto" deinterlaces only
     frames that are interlaced (1080i channels), not the progressive ones (720p50, 1080p); mpv without "auto" gets "yes"."""
     try:
-        if not (settings.current_values().get("deinterlace", True) and deinterlace_possible(mpvclient.prop("hwdec-current"))):
+        if not (
+            settings.current_values().get("deinterlace", True) and deinterlace_possible(mpvclient.prop("hwdec-current"))
+        ):
             mpvclient.mpv("set_property", "deinterlace", False)
         elif mpvclient.mpv("set_property", "deinterlace", "auto").get("error") != "success":
             mpvclient.mpv("set_property", "deinterlace", True)
@@ -56,18 +58,28 @@ def hdmi_ports():
     """HDMI connectors from sysfs: name, status, enabled and the first distinct modes."""
     out = []
     for c in connectors():
-        def read(f):
+
+        def read(f, c=c):
             try:
                 return open(os.path.join(c, f)).read().split()
             except Exception:
                 return []
-        name = os.path.basename(c).split("-", 1)[1]            # card1-HDMI-A-1 -> HDMI-A-1
+
+        name = os.path.basename(c).split("-", 1)[1]  # card1-HDMI-A-1 -> HDMI-A-1
         modes, allm = [], read("modes")
         for m in allm:
             if m not in modes:
                 modes.append(m)
-        out.append({"all_modes": allm, "name": name, "card": os.path.basename(c).split("-", 1)[0],
-                    "status": (read("status") or ["?"])[0], "enabled": (read("enabled") or ["?"])[0], "modes": modes[:6]})
+        out.append(
+            {
+                "all_modes": allm,
+                "name": name,
+                "card": os.path.basename(c).split("-", 1)[0],
+                "status": (read("status") or ["?"])[0],
+                "enabled": (read("enabled") or ["?"])[0],
+                "modes": modes[:6],
+            }
+        )
     return out
 
 
@@ -81,8 +93,16 @@ def parse_modetest(text):
             continue
         m = re.match(r"^\s+#(\d+)\s+(\d+)x(\d+)(i?)\s+([\d.]+)\s", line)
         if m and cur is not None:
-            cur.append({"index": int(m.group(1)), "w": int(m.group(2)), "h": int(m.group(3)), "interlaced": bool(m.group(4)),
-                        "hz": float(m.group(5)), "preferred": "preferred" in line})
+            cur.append(
+                {
+                    "index": int(m.group(1)),
+                    "w": int(m.group(2)),
+                    "h": int(m.group(3)),
+                    "interlaced": bool(m.group(4)),
+                    "hz": float(m.group(5)),
+                    "preferred": "preferred" in line,
+                }
+            )
     return res
 
 
@@ -169,13 +189,22 @@ def drm_modes():
         for i, m in enumerate(p["all_modes"]):
             mm = re.match(r"^(\d+)x(\d+)(i?)$", m)
             if mm:
-                modes.append({"index": i, "w": int(mm.group(1)), "h": int(mm.group(2)), "interlaced": bool(mm.group(3)), "hz": None, "preferred": False})
+                modes.append(
+                    {
+                        "index": i,
+                        "w": int(mm.group(1)),
+                        "h": int(mm.group(2)),
+                        "interlaced": bool(mm.group(3)),
+                        "hz": None,
+                        "preferred": False,
+                    }
+                )
         out[p["name"]] = modes
     return out
 
 
 VIDEO_PRESETS = {"2160p": (3840, 2160), "1080p": (1920, 1080), "720p": (1280, 720)}
-START_HZ = 50.0          # TV7 and SRG broadcast at 25/50 fps: starting at 50 Hz spares the switch (an mpv restart) on the first channel
+START_HZ = 50.0  # TV7 and SRG broadcast at 25/50 fps: starting at 50 Hz spares the switch (an mpv restart) on the first channel
 
 
 def start_rate(lst, cands):
@@ -203,7 +232,7 @@ def png_to_bgra(path):
     return png_bytes_to_bgra(open(path, "rb").read())
 
 
-PNG_MAX_PIXELS = 2_000_000                                        # logos and the idle logo are far smaller
+PNG_MAX_PIXELS = 2_000_000  # logos and the idle logo are far smaller
 
 
 def png_bytes_to_bgra(data):
@@ -213,8 +242,8 @@ def png_bytes_to_bgra(data):
         raise ValueError("not a PNG file")
     pos, idat, w, h, ctype, palette, trns = 8, b"", 0, 0, 0, b"", b""
     while pos < len(data):
-        n = int.from_bytes(data[pos:pos + 4], "big")
-        kind, body = data[pos + 4:pos + 8], data[pos + 8:pos + 8 + n]
+        n = int.from_bytes(data[pos : pos + 4], "big")
+        kind, body = data[pos + 4 : pos + 8], data[pos + 8 : pos + 8 + n]
         pos += 12 + n
         if kind == b"IHDR":
             w, h = int.from_bytes(body[0:4], "big"), int.from_bytes(body[4:8], "big")
@@ -234,12 +263,12 @@ def png_bytes_to_bgra(data):
     bpp = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}[ctype]
     stride = w * bpp
     need = h * (stride + 1)
-    raw = zlib.decompressobj().decompress(idat, need)               # never more than the image needs (no decompression bomb)
+    raw = zlib.decompressobj().decompress(idat, need)  # never more than the image needs (no decompression bomb)
     if len(raw) < need:
         raise ValueError("PNG data incomplete")
     prev, out = bytearray(stride), bytearray()
     for y in range(h):
-        f, line = raw[y * (stride + 1)], bytearray(raw[y * (stride + 1) + 1:(y + 1) * (stride + 1)])
+        f, line = raw[y * (stride + 1)], bytearray(raw[y * (stride + 1) + 1 : (y + 1) * (stride + 1)])
         for i in range(stride):
             a = line[i - bpp] if i >= bpp else 0
             b = prev[i]
@@ -261,7 +290,7 @@ def png_bytes_to_bgra(data):
                 r_, g, b_, al = line[q], line[q + 1], line[q + 2], 255
             elif ctype == 3:
                 k = line[q]
-                r_, g, b_ = palette[3 * k:3 * k + 3] or b"\0\0\0"
+                r_, g, b_ = palette[3 * k : 3 * k + 3] or b"\0\0\0"
                 al = trns[k] if k < len(trns) else 255
             elif ctype == 4:
                 r_ = g = b_ = line[q]
@@ -277,11 +306,14 @@ def png_bytes_to_bgra(data):
 def resolve_mode(video_mode, refresh, port, modes=None):
     """Value for mpv --drm-mode plus a note. 'preferred' / 'highest' pass through; a preset is resolved to the mode INDEX of
     the connector (a "1920x1080@50" spec could match an interlaced mode first). The display must offer the preset."""
-    if video_mode in ("", "auto"):                             # 1080p if offered (see auto_size); refresh auto: follows the stream later (match_refresh)
+    # auto: 1080p if offered (see auto_size); refresh auto: follows the stream later (match_refresh)
+    if video_mode in ("", "auto"):
         modes = drm_modes() if modes is None else modes
-        for lst in ([modes[port]] if port and port in modes else list(modes.values())):
+        for lst in [modes[port]] if port and port in modes else list(modes.values()):
             size = auto_size(lst)
-            cands = [m for m in lst if size and (m["w"], m["h"]) == size and not m["interlaced"] and m["hz"] is not None]
+            cands = [
+                m for m in lst if size and (m["w"], m["h"]) == size and not m["interlaced"] and m["hz"] is not None
+            ]
             if not cands:
                 continue
             if refresh in ("", "auto"):
@@ -302,8 +334,10 @@ def resolve_mode(video_mode, refresh, port, modes=None):
         lst = modes[port]
     elif port:
         lst = []
-    else:                                                          # port auto: first connector that offers the size
-        lst = next((x for x in modes.values() if any(m["w"] == w and m["h"] == h and not m["interlaced"] for m in x)), [])
+    else:  # port auto: first connector that offers the size
+        lst = next(
+            (x for x in modes.values() if any(m["w"] == w and m["h"] == h and not m["interlaced"] for m in x)), []
+        )
     cands = [m for m in lst if m["w"] == w and m["h"] == h and not m["interlaced"]]
     if not cands:
         return "preferred", f"{video_mode} is not offered by the display, using the preferred mode"
@@ -337,11 +371,11 @@ def mode_for_fps(fps, video_mode, port, modes=None):
         elif video_mode in VIDEO_PRESETS:
             size = VIDEO_PRESETS[video_mode]
         else:
-            return None                                          # "highest" is left to mpv
+            return None  # "highest" is left to mpv
         if not size:
             continue
         cands = [m for m in lst if (m["w"], m["h"]) == size and not m["interlaced"] and m["hz"] is not None]
-        for mult in (1, 2, 3, 4):                                # exact rate first, then multiples (25 -> 50)
+        for mult in (1, 2, 3, 4):  # exact rate first, then multiples (25 -> 50)
             target = fps * mult
             if mult == 1 and target < 24 - 0.5:
                 continue
@@ -354,7 +388,15 @@ def mode_for_fps(fps, video_mode, port, modes=None):
 # vo: gpu|drm; pending: chosen without a connected display (plain DRM for now, chosen again once a display is there); hw: H.265 is
 # decoded in hardware; mode: the drm-mode mpv was started with; override: the output mode that follows the stream's frame rate.
 # Tests and the dev server attach to an mpv started by someone else and set the start values through TV7_VIDEO.
-VIDEO = {"vo": None, "pending": "no", "hw": os.environ.get("TV7_HW_AVAILABLE", "no"), "mode": "", "override": "", "extra": [], "msg": ""}
+VIDEO = {
+    "vo": None,
+    "pending": "no",
+    "hw": os.environ.get("TV7_HW_AVAILABLE", "no"),
+    "mode": "",
+    "override": "",
+    "extra": [],
+    "msg": "",
+}
 VIDEO.update(dict(x.split("=", 1) for x in os.environ.get("TV7_VIDEO", "").split() if "=" in x))
 
 
@@ -376,12 +418,17 @@ def match_refresh(log):
     modes = drm_modes()
     want = mode_for_fps(fps, vals.get("video_mode"), port, modes)
     cur = current_drm_mode()
-    if not cur:                                                 # no override yet: the mode mpv was started with
+    if not cur:  # no override yet: the mode mpv was started with
         cur = video_state()["mode"]
-    if not cur:                                                 # not known (mpv started by someone else): compute it the same way
+    if not cur:  # not known (mpv started by someone else): compute it the same way
         start = {k: settings._applied.get(k, vals.get(k)) for k in ("video_mode", "video_refresh", "hdmi_port")}
-        cur = resolve_mode(start["video_mode"], start["video_refresh"], start["hdmi_port"] if start["hdmi_port"] != "auto" else "", modes)[0]
-    if cur == "preferred":                                      # find the index of the display's preferred mode
+        cur = resolve_mode(
+            start["video_mode"],
+            start["video_refresh"],
+            start["hdmi_port"] if start["hdmi_port"] != "auto" else "",
+            modes,
+        )[0]
+    if cur == "preferred":  # find the index of the display's preferred mode
         lists = [modes[port]] if port and port in modes else list(modes.values())
         cur = next((str(m["index"]) for lst in lists for m in lst if m["preferred"]), "")
     if want is None or str(want) == cur:
@@ -400,7 +447,10 @@ def pick_hwdec(vo, hardware_decoding, hwdec_help, v4l2_names, arch, render_node)
       software deinterlacing keeps working. Not tested on a Pi 4.
     - x86 with Intel or AMD graphics: VAAPI for H.264 and H.265, deinterlaced in hardware (vavpp); without the GPU output the frames
       are copied (vaapi-copy). Not tested on a device."""
-    has = lambda name: re.search(rf"^ *{re.escape(name)}( |$)", hwdec_help or "", re.M) is not None
+
+    def has(name):
+        return re.search(rf"^ *{re.escape(name)}( |$)", hwdec_help or "", re.M) is not None
+
     hevc = "rpi-hevc-dec" in (v4l2_names or "") and has("drm")
     h264 = "bcm2835-codec-decode" in (v4l2_names or "") and has("v4l2m2m-copy")
     vaapi = arch == "x86_64" and bool(render_node) and has("vaapi")
@@ -408,16 +458,36 @@ def pick_hwdec(vo, hardware_decoding, hwdec_help, v4l2_names, arch, render_node)
     if hardware_decoding == "no":
         return args + ["--hwdec=no"], False, "off"
     if vaapi:
-        return args + ["--hwdec=vaapi" if vo == "gpu" else "--hwdec=vaapi-copy"], False, f"VAAPI ({render_node}), all codecs the GPU supports"
+        return (
+            args + ["--hwdec=vaapi" if vo == "gpu" else "--hwdec=vaapi-copy"],
+            False,
+            f"VAAPI ({render_node}), all codecs the GPU supports",
+        )
     hw, codecs, msg = [], [], []
     if hevc and vo == "gpu":
-        args += ["--gpu-hwdec-interop=drmprime-overlay", "--drm-draw-plane=overlay", "--drm-drmprime-video-plane=primary"]
+        args += [
+            "--gpu-hwdec-interop=drmprime-overlay",
+            "--drm-draw-plane=overlay",
+            "--drm-drmprime-video-plane=primary",
+        ]
         hw, codecs, msg = ["drm"], ["hevc"], ["H.265 on the Raspberry Pi HEVC decoder"]
     if h264:
-        hw, codecs, msg = hw + ["v4l2m2m-copy"], codecs + ["h264"], msg + ["H.264 on the Raspberry Pi 4 decoder (v4l2m2m-copy, not tested)"]
+        hw, codecs, msg = (
+            hw + ["v4l2m2m-copy"],
+            codecs + ["h264"],
+            msg + ["H.264 on the Raspberry Pi 4 decoder (v4l2m2m-copy, not tested)"],
+        )
     if hw:
-        return args + [f"--hwdec={','.join(hw)}", f"--hwdec-codecs={','.join(codecs)}"], "drm" in hw, "; ".join(msg) + "; other channels in software"
-    return args + ["--hwdec=auto-safe"], False, f"mpv auto-safe (Raspberry Pi HEVC decoder: {'yes' if hevc else 'no'}, video output {vo})"
+        return (
+            args + [f"--hwdec={','.join(hw)}", f"--hwdec-codecs={','.join(codecs)}"],
+            "drm" in hw,
+            "; ".join(msg) + "; other channels in software",
+        )
+    return (
+        args + ["--hwdec=auto-safe"],
+        False,
+        f"mpv auto-safe (Raspberry Pi HEVC decoder: {'yes' if hevc else 'no'}, video output {vo})",
+    )
 
 
 def _read_all(pattern):
@@ -436,6 +506,6 @@ def hdmi_card(port):
     for c in connectors():
         name = os.path.basename(c)
         card = name.split("-", 1)[0]
-        if not port or name[len(card) + 1:] == port:
+        if not port or name[len(card) + 1 :] == port:
             return f"/dev/dri/{card}", name
     return None, None

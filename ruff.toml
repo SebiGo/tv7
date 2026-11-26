@@ -1,0 +1,10 @@
+# Python lint and format (ruff): `ruff check` and `ruff format --check` in CI, `ruff format` before a commit.
+target-version = "py313"
+line-length = 120
+
+[lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["E501"]   # the formatter keeps code within line-length; long strings and comments are left as they are
+
+[lint.isort]
+known-first-party = ["tv7", "mock_mpv", "fakes"]

@@ -1,4 +1,5 @@
 """What plays: channel start and stop on one worker thread, mpv restarts, the HDMI watcher, the stop without operation."""
+
 import concurrent.futures
 import os
 import threading
@@ -6,11 +7,10 @@ import time
 
 from tv7 import cec, config, display, init7, mpvclient, settings
 
-
 START_TIMEOUT = float(os.environ.get("TV7_START_TIMEOUT", "10"))
 MODE_WAIT_S = float(os.environ.get("TV7_MODE_WAIT_S", "25"))
-current = {"pk": None, "name": None, "source": None}   # what was started last (shown by /status and the web UI)
-last_start = {}                                        # result and log of the last channel start (support text)
+current = {"pk": None, "name": None, "source": None}  # what was started last (shown by /status and the web UI)
+last_start = {}  # result and log of the last channel start (support text)
 
 
 def stop_playback(wait=True):
@@ -23,7 +23,7 @@ def _stop_playback():
     return mpvclient.mpv("stop")
 
 
-last_played = {}                                                   # last channel started (play key)
+last_played = {}  # last channel started (play key)
 
 
 def restart_mpv(log, reason):
@@ -37,14 +37,14 @@ def restart_mpv(log, reason):
     except Exception:
         pass
     end = time.time() + MODE_WAIT_S
-    while time.time() < end:                                   # wait for the NEW mpv (different pid) to answer
+    while time.time() < end:  # wait for the NEW mpv (different pid) to answer
         time.sleep(0.4)
         pid = mpvclient.prop("pid")
         if pid is not None and pid != old_pid:
             break
     if mpvclient.prop("pid") is None:
         raise RuntimeError("mpv did not come back after the restart")
-    for k, v in settings.current_values().items():                      # live settings are not in the new mpv's command line
+    for k, v in settings.current_values().items():  # live settings are not in the new mpv's command line
         if k in ("audio_language", "audio_channels"):
             settings.apply_live(k, v)
     if keep["volume"] is not None:
@@ -67,7 +67,8 @@ def player(fn, *args, wait=True):
         try:
             return fn(*args)
         finally:
-            mpvclient.changed()                                           # what plays may have changed: tell /events
+            mpvclient.changed()  # what plays may have changed: tell /events
+
     if wait:
         return _player_pool.submit(run).result()
 
@@ -76,6 +77,7 @@ def player(fn, *args, wait=True):
             run()
         except Exception as e:
             config.log_line(f"Player action {getattr(fn, '__name__', fn)}: {type(e).__name__}: {e}")
+
     return _player_pool.submit(logged)
 
 
@@ -89,7 +91,7 @@ def _start_channel(ch, source):
         last_played.update(pk=ch["pk"], source=res.get("source"))
         cec.cec_away["since"] = None
         cec.cec_resume.clear()
-        cec.cec_active_source()                                       # TV/projector and receiver switch to the app; its remote keys come here
+        cec.cec_active_source()  # TV/projector and receiver switch to the app; its remote keys come here
     return res
 
 
@@ -97,7 +99,8 @@ def _start(ch, source):
     log = []
     if display.connectors() and not display.hdmi_ok():
         log.append("HDMI: no display connected (cable, TV off or on another input?); starting anyway")
-    if display.connectors() and display.hdmi_ok() and display.video_state()["pending"] == "yes":                    # chosen without a display: choose the video output now
+    # chosen without a display: choose the video output now
+    if display.connectors() and display.hdmi_ok() and display.video_state()["pending"] == "yes":
         restart_mpv(log, "display connected: choosing the video output again")
     for src in {"auto": ["multicast", "hls"], "multicast": ["multicast"], "hls": ["hls"]}[source]:
         try:
@@ -106,21 +109,27 @@ def _start(ch, source):
             log.append(f"{src}: {e}")
             continue
         for attempt in (1, 2):
-            mpvclient.mpv("set_property", "sid", "no")                    # every channel starts without subtitles (track picker turns them on)
+            # every channel starts without subtitles (track picker turns them on)
+            mpvclient.mpv("set_property", "sid", "no")
             mpvclient.mpv("loadfile", url, "replace")
             end = time.time() + START_TIMEOUT
             while time.time() < end:
                 if mpvclient.playing():
                     log.append(f"{src}: started (attempt {attempt})")
                     current.update(pk=ch["pk"], name=ch["name"], source=src)
-                    if display.match_refresh(log):                      # mpv restarted with a new output mode: play the channel again
+                    if display.match_refresh(log):  # mpv restarted with a new output mode: play the channel again
                         mpvclient.mpv("loadfile", url, "replace")
                         t_end = time.time() + START_TIMEOUT
                         while time.time() < t_end and not mpvclient.playing():
                             time.sleep(0.5)
                     display.update_deinterlace()
                     return {"ok": True, "channel": ch["name"], "source": src, "log": log}
-                if display.connectors() and not display.hdmi_ok() and (mpvclient.prop("time-pos") or 0) > 0 and not mpvclient.prop("video-codec"):
+                if (
+                    display.connectors()
+                    and not display.hdmi_ok()
+                    and (mpvclient.prop("time-pos") or 0) > 0
+                    and not mpvclient.prop("video-codec")
+                ):
                     # The stream runs (time advances) but mpv has no picture output: no display on HDMI. Other attempts or
                     # sources would end the same way.
                     log.append(f"{src}: the stream is received, but no display is connected to HDMI (no picture)")
@@ -134,10 +143,10 @@ def _start(ch, source):
     return {"ok": False, "channel": ch["name"], "log": log}
 
 
-HDMI_OFF_S = float(os.environ.get("TV7_HDMI_OFF_S", "15"))         # display gone this long: stop playback
-HDMI_BACK_S = float(os.environ.get("TV7_HDMI_BACK_S", "3"))        # display back this long: resume
+HDMI_OFF_S = float(os.environ.get("TV7_HDMI_OFF_S", "15"))  # display gone this long: stop playback
+HDMI_BACK_S = float(os.environ.get("TV7_HDMI_BACK_S", "3"))  # display back this long: resume
 HDMI_POLL_S = float(os.environ.get("TV7_HDMI_POLL_S", "2"))
-hdmi_stopped = {}            # channel stopped by the watcher (pk, name, source, t); empty if none
+hdmi_stopped = {}  # channel stopped by the watcher (pk, name, source, t); empty if none
 
 
 def hdmi_watch_step(state):
@@ -149,7 +158,7 @@ def hdmi_watch_step(state):
         hdmi_stopped.clear()
         return
     now, ok = time.time(), display.hdmi_ok()
-    if state.get("ok") != ok:                                   # display connected or gone: the web UI shows it
+    if state.get("ok") != ok:  # display connected or gone: the web UI shows it
         state["ok"] = ok
         mpvclient.changed()
     if ok:
@@ -167,7 +176,10 @@ def hdmi_watch_step(state):
             return
         try:
             res = start(init7.find_channel(ch["pk"]), ch["source"] if ch["source"] in ("multicast", "hls") else "auto")
-            config.log_line(f"HDMI display back: {ch['name']} " + ("started again" if res["ok"] else "could not be started: " + "; ".join(res["log"])))
+            config.log_line(
+                f"HDMI display back: {ch['name']} "
+                + ("started again" if res["ok"] else "could not be started: " + "; ".join(res["log"]))
+            )
         except Exception as e:
             config.log_line(f"HDMI display back: {ch['name']} could not be started: {e}")
 
@@ -181,12 +193,14 @@ def _hdmi_stop(mode):
     except Exception:
         pass
     current.update(pk=None, name=None, source=None)
-    config.log_line(f"No HDMI display for {HDMI_OFF_S:g} s: playback of {hdmi_stopped['name']} stopped"
-             + (", it resumes when the display is back" if mode == "resume" else ""))
+    config.log_line(
+        f"No HDMI display for {HDMI_OFF_S:g} s: playback of {hdmi_stopped['name']} stopped"
+        + (", it resumes when the display is back" if mode == "resume" else "")
+    )
 
 
-MINUTE_S = float(os.environ.get("TV7_MINUTE_S", "60"))            # overridable for tests
-autostopped = {}             # last automatic stop: {"reason": "idle", "channel", "t", "minutes"}; cleared by the next start
+MINUTE_S = float(os.environ.get("TV7_MINUTE_S", "60"))  # overridable for tests
+autostopped = {}  # last automatic stop: {"reason": "idle", "channel", "t", "minutes"}; cleared by the next start
 last_activity = {"t": time.time()}
 
 

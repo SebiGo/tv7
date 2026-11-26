@@ -1,4 +1,5 @@
 """Init7 channel lists (TV7 and SRG Full HD), stream addresses (Init7 only), channel logos, favorites."""
+
 import hashlib
 import ipaddress
 import json
@@ -9,24 +10,42 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-
-API = os.environ.get("TV7_API", "https://api.tv.init7.net/api/tvchannel/")   # public Init7 channel list
-HLS_PREFIXES = tuple(os.environ.get("TV7_HLS_PREFIX", "https://api.tv.init7.net/,https://vtvapi03.sys.init7.net/").split(","))   # only HLS URLs from Init7
-SRG_FHD = os.environ.get("TV7_SRG_FHD", "true") == "true"                                   # SRG Full HD list (H.265); the switch exists for tests only
+API = os.environ.get("TV7_API", "https://api.tv.init7.net/api/tvchannel/")  # public Init7 channel list
+# only HLS URLs from Init7
+HLS_PREFIXES = tuple(
+    os.environ.get("TV7_HLS_PREFIX", "https://api.tv.init7.net/,https://vtvapi03.sys.init7.net/").split(",")
+)
+SRG_FHD = os.environ.get("TV7_SRG_FHD", "true") == "true"  # SRG Full HD list (H.265); the switch exists for tests only
 SRG_MC_URL = os.environ.get("TV7_SRG_MC_URL", "https://www.init7.net/files/srg-fhd-mc.m3u")
 SRG_HLS_URL = os.environ.get("TV7_SRG_HLS_URL", "https://www.init7.net/files/srg-fhd-hls.m3u")
 CACHE_S = int(os.environ.get("TV7_CACHE_S", "300"))
-LOGO_PREFIXES = tuple(os.environ.get("TV7_LOGO_PREFIX", "https://api.tv.init7.net/media/logos/,https://vtvapi03.sys.init7.net/media/logos/").split(","))
-LOGO_DIR = os.environ.get("TV7_LOGO_DIR", "/data/logos")                 # cache of channel logos
-FAV_FILE = os.environ.get("TV7_FAVORITES", "/data/favorites.json")   # favorite channels (ids), shared by all users of the web UI
-UDP_OPTS = "fifo_size=65536&overrun_nonfatal=1"                  # FFmpeg UDP input options for multicast
+LOGO_PREFIXES = tuple(
+    os.environ.get(
+        "TV7_LOGO_PREFIX", "https://api.tv.init7.net/media/logos/,https://vtvapi03.sys.init7.net/media/logos/"
+    ).split(",")
+)
+LOGO_DIR = os.environ.get("TV7_LOGO_DIR", "/data/logos")  # cache of channel logos
+# favorite channels (ids), shared by all users of the web UI
+FAV_FILE = os.environ.get("TV7_FAVORITES", "/data/favorites.json")
+UDP_OPTS = "fifo_size=65536&overrun_nonfatal=1"  # FFmpeg UDP input options for multicast
 _cache = {"t": 0.0, "data": [], "srg": []}
-_sync = {"tv7_ok": None, "tv7_error": None, "srg_ok": None, "srg_error": None, "tried": None}   # channel list sync state (support text)
+# channel list sync state (support text)
+_sync = {
+    "tv7_ok": None,
+    "tv7_error": None,
+    "srg_ok": None,
+    "srg_error": None,
+    "tried": None,
+}
 
 
 def logo_file(url):
     """Channel logo (PNG/JPEG) from Init7: only URLs under LOGO_PREFIXES, cached on disk. Returns (bytes, content type)."""
-    if not url.startswith(LOGO_PREFIXES) or not re.search(r"\.(png|jpe?g)$", url, re.I) or re.search(r"[\s\x00-\x1f]", url):
+    if (
+        not url.startswith(LOGO_PREFIXES)
+        or not re.search(r"\.(png|jpe?g)$", url, re.I)
+        or re.search(r"[\s\x00-\x1f]", url)
+    ):
         raise PermissionError("not an Init7 logo URL")
     ctype = "image/png" if url.lower().endswith(".png") else "image/jpeg"
     path = os.path.join(LOGO_DIR, hashlib.sha256(url.encode()).hexdigest())
@@ -75,8 +94,12 @@ def parse_m3u(text):
             nr = re.search(r'tvg-chno="(\d+)"', line)
             grp = re.search(r'group-title="([^"]*)"', line)
             logo = re.search(r'tvg-logo="([^"]*)"', line)
-            cur = {"name": line.rsplit(",", 1)[-1].strip(), "nr": int(nr.group(1)) if nr else None, "group": grp.group(1) if grp else "",
-                   "logo": logo.group(1) if logo else None}
+            cur = {
+                "name": line.rsplit(",", 1)[-1].strip(),
+                "nr": int(nr.group(1)) if nr else None,
+                "group": grp.group(1) if grp else "",
+                "logo": logo.group(1) if logo else None,
+            }
         elif line and not line.startswith("#") and cur:
             out.append({**cur, "url": line})
             cur = None
@@ -85,16 +108,30 @@ def parse_m3u(text):
 
 def srg_fhd_channels():
     """The SRG Full HD list (separate multicast and HLS playlists on init7.net), merged by channel name."""
+
     def get(url):
         with urllib.request.urlopen(url, timeout=10) as r:
             return parse_m3u(r.read().decode("utf-8", "replace"))
+
     mc = {c["name"]: c for c in get(SRG_MC_URL)}
     hls = {c["name"]: c for c in get(SRG_HLS_URL)}
     out = []
-    for name in sorted(set(mc) | set(hls), key=lambda n: ((mc.get(n) or hls.get(n))["nr"] or 1e9)):
+    for name in sorted(set(mc) | set(hls), key=lambda n: (mc.get(n) or hls.get(n))["nr"] or 1e9):
         c = mc.get(name) or hls.get(name)
-        out.append({"pk": "srg-fhd:" + name, "name": name, "ordernum": c["nr"], "hd": True, "visible": True, "list": "srg_fhd", "logo": c.get("logo"),
-                    "src": mc[name]["url"] if name in mc else None, "has_hls": name in hls, "hls_src": hls[name]["url"] if name in hls else None})
+        out.append(
+            {
+                "pk": "srg-fhd:" + name,
+                "name": name,
+                "ordernum": c["nr"],
+                "hd": True,
+                "visible": True,
+                "list": "srg_fhd",
+                "logo": c.get("logo"),
+                "src": mc[name]["url"] if name in mc else None,
+                "has_hls": name in hls,
+                "hls_src": hls[name]["url"] if name in hls else None,
+            }
+        )
     return out
 
 
@@ -116,7 +153,7 @@ def channels(force=False):
                     srg = srg_fhd_channels()
                     _sync.update(srg_ok=time.time(), srg_error=None)
                 except Exception as e:
-                    _sync["srg_error"] = str(e)                       # keep the last SRG list; TV7 must not depend on it
+                    _sync["srg_error"] = str(e)  # keep the last SRG list; TV7 must not depend on it
             else:
                 srg = []
             _cache.update(t=time.time(), data=tv7 + srg, srg=srg)
@@ -124,7 +161,7 @@ def channels(force=False):
         except Exception as e:
             _sync["tv7_error"] = str(e)
             if not _cache["data"]:
-                raise RuntimeError(f"Init7 channel list not reachable: {e}")
+                raise RuntimeError(f"Init7 channel list not reachable: {e}") from e
     return _cache["data"]
 
 

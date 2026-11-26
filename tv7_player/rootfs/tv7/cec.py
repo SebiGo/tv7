@@ -1,4 +1,5 @@
 """HDMI-CEC: whether the port is free, registration as "TV7", the received messages (remote control keys, standby, source switches) and the answers to the TV."""
+
 import glob
 import json
 import os
@@ -12,14 +13,14 @@ import urllib.request
 
 from tv7 import config, init7, player, settings, tvosd
 
-
 CEC_CTL = os.environ.get("TV7_CEC_CTL", "cec-ctl")
 CEC_GLOB = os.environ.get("TV7_CEC_GLOB", "/dev/cec*")
-CEC_NAME = "TV7"                                                  # OSD name: how the app shows up in the TV's/projector's device list
-CEC_CORE_WAIT_S = float(os.environ.get("TV7_CEC_CORE_WAIT_S", "300"))   # wait this long for Home Assistant Core to finish starting
+CEC_NAME = "TV7"  # OSD name: how the app shows up in the TV's/projector's device list
+# wait this long for Home Assistant Core to finish starting
+CEC_CORE_WAIT_S = float(os.environ.get("TV7_CEC_CORE_WAIT_S", "300"))
 CEC_CORE_POLL_S = float(os.environ.get("TV7_CEC_CORE_POLL_S", "10"))
 cec_state = {"state": "off", "device": None, "detail": None, "devices": [], "topology": []}
-CEC_LOCKED = ("ha_integration", "in_use")                         # states in which the web UI greys out the option
+CEC_LOCKED = ("ha_integration", "in_use")  # states in which the web UI greys out the option
 
 
 def ha_core_config():
@@ -27,7 +28,9 @@ def ha_core_config():
     if not config.SUPERVISOR_TOKEN:
         return None
     try:
-        req = urllib.request.Request(config.SUPERVISOR + "/core/api/config", headers={"Authorization": f"Bearer {config.SUPERVISOR_TOKEN}"})
+        req = urllib.request.Request(
+            config.SUPERVISOR + "/core/api/config", headers={"Authorization": f"Bearer {config.SUPERVISOR_TOKEN}"}
+        )
         with urllib.request.urlopen(req, timeout=10) as r:
             return json.load(r)
     except Exception:
@@ -63,17 +66,26 @@ def parse_cec_topology(text):
     for block in re.split(r"System Information for device ", text)[1:]:
         m = re.match(r"(\d+) \(([^)]*)\)", block)
         name = _cec_field(block, "OSD Name")
-        if name and re.search(r"\bTimeout\b|^Tx\b", name):            # cec-ctl prints the transmit status when the device did not answer
+        # cec-ctl prints the transmit status when the device did not answer
+        if name and re.search(r"\bTimeout\b|^Tx\b", name):
             name = None
-        devices.append({"address": m[1] if m else None, "type": m[2] if m else None, "name": name,
-                        "vendor": _cec_field(block, "Vendor ID"), "physical": _cec_field(block, "Physical Address"),
-                        "power": _cec_field(block, "Power Status")})
+        devices.append(
+            {
+                "address": m[1] if m else None,
+                "type": m[2] if m else None,
+                "name": name,
+                "vendor": _cec_field(block, "Vendor ID"),
+                "physical": _cec_field(block, "Physical Address"),
+                "power": _cec_field(block, "Power Status"),
+            }
+        )
     topo = text.split("Topology:", 1)[1].strip("\n").splitlines() if "Topology:" in text else []
     return devices, [t.expandtabs(4).rstrip() for t in topo if t.strip()]
 
 
 CEC_LOG_LINES = int(os.environ.get("TV7_CEC_LOG_LINES", "300"))
-CEC_MON_FAIL_S = float(os.environ.get("TV7_CEC_MON_FAIL_S", "3"))  # a receiver that ends this fast did not work: try the next one
+# a receiver that ends this fast did not work: try the next one
+CEC_MON_FAIL_S = float(os.environ.get("TV7_CEC_MON_FAIL_S", "3"))
 _cec_log = []
 _cec_log_lock = threading.Lock()
 
@@ -98,7 +110,9 @@ def cec_monitor(dev):
         cec_log_add(f"--- {CEC_CTL} -d {dev} {' '.join(args)} ---")
         t0 = time.time()
         try:
-            proc = subprocess.Popen([CEC_CTL, "-d", dev, *args], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            proc = subprocess.Popen(
+                [CEC_CTL, "-d", dev, *args], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
+            )
             for line in proc.stdout:
                 if line.strip():
                     cec_log_add(line.rstrip().expandtabs(4))
@@ -154,21 +168,31 @@ def cec_setup(enabled):
         return
     if ha is None:
         config.log_line("CEC: Home Assistant not reachable; only the CEC port itself is checked")
-    infos = read_infos()                                          # after the wait: the port as it is now
+    infos = read_infos()  # after the wait: the port as it is now
     usable = [(d, i) for d, i in infos if i]
     if not usable:
         cec_state.update(state="error", detail=f"{CEC_CTL} failed on {', '.join(devs)}")
         return
     # The adapter of the connected port has a physical address (f.f.f.f = nothing connected).
-    dev, info = next(((d, i) for d, i in usable if (_cec_field(i, "Physical Address") or "f.f.f.f") != "f.f.f.f"), usable[0])
+    dev, info = next(
+        ((d, i) for d, i in usable if (_cec_field(i, "Physical Address") or "f.f.f.f") != "f.f.f.f"), usable[0]
+    )
     mask, osd = _cec_field(info, "Logical Address Mask") or "0x0000", _cec_field(info, "OSD Name") or ""
     try:
         used = int(mask, 16) != 0 and osd != CEC_NAME
     except ValueError:
         used = False
     if used:
-        cec_state.update(state="in_use", device=dev, detail=f"already registered as '{osd}' (logical address mask {mask})", devices=[], topology=[])
-        config.log_line(f"CEC: {dev} is already used by another program ('{osd}', e.g. Home Assistant's HDMI-CEC integration); the app leaves it alone")
+        cec_state.update(
+            state="in_use",
+            device=dev,
+            detail=f"already registered as '{osd}' (logical address mask {mask})",
+            devices=[],
+            topology=[],
+        )
+        config.log_line(
+            f"CEC: {dev} is already used by another program ('{osd}', e.g. Home Assistant's HDMI-CEC integration); the app leaves it alone"
+        )
         return
     code, out = _cec(dev, "--playback", f"--osd-name={CEC_NAME}")
     if code:
@@ -177,14 +201,36 @@ def cec_setup(enabled):
         return
     code, out = _cec(dev, "-S", timeout=60)
     devices, topo = parse_cec_topology(out)
-    cec_state.update(state="active", device=dev, phys=_cec_field(info, "Physical Address"),
-                     detail=f"physical address {_cec_field(info, 'Physical Address') or '?'}", devices=devices, topology=topo)
-    config.log_line(f"CEC: registered on {dev} as '{CEC_NAME}'; devices: " + (", ".join(f"{x['type']} '{x['name']}'" for x in devices) or "none answered"))
+    cec_state.update(
+        state="active",
+        device=dev,
+        phys=_cec_field(info, "Physical Address"),
+        detail=f"physical address {_cec_field(info, 'Physical Address') or '?'}",
+        devices=devices,
+        topology=topo,
+    )
+    config.log_line(
+        f"CEC: registered on {dev} as '{CEC_NAME}'; devices: "
+        + (", ".join(f"{x['type']} '{x['name']}'" for x in devices) or "none answered")
+    )
     threading.Thread(target=cec_monitor, args=(dev,), daemon=True).start()
 
 
-CEC_KEYS = {0x00: "ok", 0x01: "up", 0x02: "down", 0x03: "left", 0x04: "right", 0x0d: "back", 0x30: "ch_up", 0x31: "ch_down",
-            0x35: "info", 0x44: "play", 0x45: "stop", 0x46: "pause", **{0x20 + d: str(d) for d in range(10)}}
+CEC_KEYS = {
+    0x00: "ok",
+    0x01: "up",
+    0x02: "down",
+    0x03: "left",
+    0x04: "right",
+    0x0D: "back",
+    0x30: "ch_up",
+    0x31: "ch_down",
+    0x35: "info",
+    0x44: "play",
+    0x45: "stop",
+    0x46: "pause",
+    **{0x20 + d: str(d) for d in range(10)},
+}
 KEYS = set(CEC_KEYS.values())
 _cec_rx = {"msg": None}
 
@@ -198,15 +244,19 @@ def cec_send(*args):
     def run():
         try:
             code, out = _cec(dev, *args, timeout=10)
-            cec_log_add(f"Sent: {' '.join(args)}" + ("" if code == 0 else f" (failed: {(out.strip().splitlines() or ['?'])[-1]})"))
+            cec_log_add(
+                f"Sent: {' '.join(args)}"
+                + ("" if code == 0 else f" (failed: {(out.strip().splitlines() or ['?'])[-1]})")
+            )
         except Exception as e:
             cec_log_add(f"Sent: {' '.join(args)} (failed: {e})")
+
     threading.Thread(target=run, daemon=True).start()
 
 
-CEC_AWAY_S = float(os.environ.get("TV7_CEC_AWAY_S", "30"))         # the TV shows another source this long: stop
-cec_away = {"since": None}                                         # TV switched to another source at this time (None: TV7 shown)
-cec_resume = {}                                                    # channel stopped because of CEC, to start again when TV7 is shown
+CEC_AWAY_S = float(os.environ.get("TV7_CEC_AWAY_S", "30"))  # the TV shows another source this long: stop
+cec_away = {"since": None}  # TV switched to another source at this time (None: TV7 shown)
+cec_resume = {}  # channel stopped because of CEC, to start again when TV7 is shown
 
 
 def cec_tv_gone(reason):
@@ -223,8 +273,11 @@ def _cec_tv_gone(reason):
     if mode == "resume":
         cec_resume.update(pk=player.current["pk"], source=player.current["source"])
     cec_away["since"] = None
-    player.auto_stop("cec", f"HDMI-CEC: {reason}: playback of {player.current['name']} stopped"
-              + (", it resumes when the TV shows TV7 again" if mode == "resume" else ""))
+    player.auto_stop(
+        "cec",
+        f"HDMI-CEC: {reason}: playback of {player.current['name']} stopped"
+        + (", it resumes when the TV shows TV7 again" if mode == "resume" else ""),
+    )
 
 
 def cec_shown(addr):
@@ -237,7 +290,9 @@ def cec_shown(addr):
             try:
                 config.log_line("HDMI-CEC: the TV shows TV7 again, playback resumes")
                 with tvosd._menu_lock:
-                    tvosd.play_async(init7.find_channel(ch["pk"]), ch["source"] if ch["source"] in ("multicast", "hls") else "auto")
+                    tvosd.play_async(
+                        init7.find_channel(ch["pk"]), ch["source"] if ch["source"] in ("multicast", "hls") else "auto"
+                    )
             except Exception as e:
                 config.log_line(f"HDMI-CEC: resume failed: {e}")
     elif player.current["pk"] and cec_away["since"] is None:
@@ -265,9 +320,9 @@ def cec_parse(line):
         _cec_rx["msg"] = m[3]
         if m[3] == "GIVE_DEVICE_POWER_STATUS":
             cec_send(f"--to={m[1]}", "--report-power-status=pwr-state=on")
-        elif m[3] == "STANDBY" and m[1] == "0":                   # from the TV (to all or to the app)
+        elif m[3] == "STANDBY" and m[1] == "0":  # from the TV (to all or to the app)
             cec_tv_gone("the TV switched to standby")
-        elif m[3] == "REQUEST_ACTIVE_SOURCE" and player.current["pk"]:   # asked who plays: the app, if a channel runs
+        elif m[3] == "REQUEST_ACTIVE_SOURCE" and player.current["pk"]:  # asked who plays: the app, if a channel runs
             cec_active_source()
         return
     if _cec_rx["msg"] in ("SET_STREAM_PATH", "ACTIVE_SOURCE", "ROUTING_CHANGE"):

@@ -1,4 +1,5 @@
 """The HTTP API (Home Assistant on this device) and the web UI (Home Assistant Ingress): endpoints, status, events."""
+
 import json
 import os
 import threading
@@ -6,26 +7,53 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
 
 from tv7 import cec, config, display, init7, mpvclient, player, settings, support, system, tvosd
 
-
-EVENTS_S = float(os.environ.get("TV7_EVENTS_S", "3"))              # /events: at least this often (live values)
+EVENTS_S = float(os.environ.get("TV7_EVENTS_S", "3"))  # /events: at least this often (live values)
 
 
 def status_view():
     """What the web UI shows: what plays, HDMI, volume, tracks, output, system load, automatic stops, pending restart."""
-    return {"hdmi": display.hdmi_status(), "playing": mpvclient.playing(), "title": mpvclient.prop("media-title"),
-                "video": mpvclient.prop("video-codec"), "audio": mpvclient.prop("audio-codec-name"), "audio_out": mpvclient.prop("current-ao"),
-                "volume": mpvclient.prop("volume"), "mute": mpvclient.prop("mute"), "channel": player.current["name"],
-                "pk": player.current["pk"], "source": player.current["source"],
-                "stream": {"w": mpvclient.prop("video-params/w"), "h": mpvclient.prop("video-params/h"), "fps": mpvclient.prop("container-fps") or mpvclient.prop("estimated-vf-fps")},
-                "output": {"w": mpvclient.prop("osd-width"), "h": mpvclient.prop("osd-height"), "hz": mpvclient.prop("display-fps")},
-                "version": config.app_version(), "vo": mpvclient.prop("current-vo"), "hwdec": mpvclient.prop("hwdec-current"), "system": system.system_load(), "audio_tracks": mpvclient.tracks()["audio"], "sub_tracks": mpvclient.tracks()["sub"],
-                "autostopped": dict(player.autostopped) or None,
-                "hdmi_stopped": {"channel": player.hdmi_stopped["name"], "resume": settings.current_values().get("hdmi_disconnect") == "resume"} if player.hdmi_stopped else None,
-                "pending_restart": settings.pending_restart(), "osd": tvosd.osd_state["on"]}
+    return {
+        "hdmi": display.hdmi_status(),
+        "playing": mpvclient.playing(),
+        "title": mpvclient.prop("media-title"),
+        "video": mpvclient.prop("video-codec"),
+        "audio": mpvclient.prop("audio-codec-name"),
+        "audio_out": mpvclient.prop("current-ao"),
+        "volume": mpvclient.prop("volume"),
+        "mute": mpvclient.prop("mute"),
+        "channel": player.current["name"],
+        "pk": player.current["pk"],
+        "source": player.current["source"],
+        "stream": {
+            "w": mpvclient.prop("video-params/w"),
+            "h": mpvclient.prop("video-params/h"),
+            "fps": mpvclient.prop("container-fps") or mpvclient.prop("estimated-vf-fps"),
+        },
+        "output": {
+            "w": mpvclient.prop("osd-width"),
+            "h": mpvclient.prop("osd-height"),
+            "hz": mpvclient.prop("display-fps"),
+        },
+        "version": config.app_version(),
+        "vo": mpvclient.prop("current-vo"),
+        "hwdec": mpvclient.prop("hwdec-current"),
+        "system": system.system_load(),
+        "audio_tracks": mpvclient.tracks()["audio"],
+        "sub_tracks": mpvclient.tracks()["sub"],
+        "autostopped": dict(player.autostopped) or None,
+        "hdmi_stopped": {
+            "channel": player.hdmi_stopped["name"],
+            "resume": settings.current_values().get("hdmi_disconnect") == "resume",
+        }
+        if player.hdmi_stopped
+        else None,
+        "pending_restart": settings.pending_restart(),
+        "osd": tvosd.osd_state["on"],
+    }
 
 
 class H(BaseHTTPRequestHandler):
@@ -38,7 +66,7 @@ class H(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def authorized(self, q):
-        return True                                                 # the API listens on 127.0.0.1 only (see main)
+        return True  # the API listens on 127.0.0.1 only (see main)
 
     def do_GET(self):
         u = urllib.parse.urlparse(self.path)
@@ -49,9 +77,22 @@ class H(BaseHTTPRequestHandler):
             return self.reply(401, {"error": "Token missing or wrong"})
         try:
             if u.path == "/channels":
-                return self.reply(200, [{"nr": c.get("ordernum"), "name": c["name"], "pk": c["pk"], "hd": c.get("hd"),
-                                         "multicast": init7.multicast_url(c.get("src")) is not None, "hls": c.get("has_hls"), "list": c.get("list", "tv7"), "logo": c.get("logo")}
-                                        for c in init7.channels(force="refresh" in q)])
+                return self.reply(
+                    200,
+                    [
+                        {
+                            "nr": c.get("ordernum"),
+                            "name": c["name"],
+                            "pk": c["pk"],
+                            "hd": c.get("hd"),
+                            "multicast": init7.multicast_url(c.get("src")) is not None,
+                            "hls": c.get("has_hls"),
+                            "list": c.get("list", "tv7"),
+                            "logo": c.get("logo"),
+                        }
+                        for c in init7.channels(force="refresh" in q)
+                    ],
+                )
             if u.path == "/play" and "channel" in q:
                 src = q.get("source", ["auto"])[0]
                 if src not in ("auto", "multicast", "hls"):
@@ -71,7 +112,10 @@ class H(BaseHTTPRequestHandler):
                 if q["k"][0] not in cec.KEYS:
                     return self.reply(400, {"error": "k: " + ", ".join(sorted(cec.KEYS))})
                 tvosd.handle_key(q["k"][0])
-                return self.reply(200, {"menu": tvosd.menu["open"], "tab": tvosd.TABS[tvosd.menu["tab"]] if tvosd.menu["open"] else None})
+                return self.reply(
+                    200,
+                    {"menu": tvosd.menu["open"], "tab": tvosd.TABS[tvosd.menu["tab"]] if tvosd.menu["open"] else None},
+                )
             if u.path == "/volume" and ("v" in q or "d" in q):
                 player.touch()
                 vol = float(q["v"][0]) if "v" in q else (mpvclient.prop("volume") or 0) + float(q["d"][0])
@@ -101,7 +145,12 @@ class H(BaseHTTPRequestHandler):
                 if tid != "off" and not tid.isdigit():
                     return self.reply(400, {"error": "id: a track number or off"})
                 player.touch()
-                return self.reply(200, mpvclient.mpv("set_property", "aid" if kind == "audio" else "sid", "no" if tid == "off" else int(tid)))
+                return self.reply(
+                    200,
+                    mpvclient.mpv(
+                        "set_property", "aid" if kind == "audio" else "sid", "no" if tid == "off" else int(tid)
+                    ),
+                )
             if u.path == "/environment":
                 return self.reply(200, system.environment())
             if u.path == "/nerd":
@@ -138,7 +187,7 @@ class H(BaseHTTPRequestHandler):
         try:
             while True:
                 with mpvclient._changed:
-                    mpvclient._changed.wait_for(lambda: mpvclient._version["n"] != seen, timeout=EVENTS_S)
+                    mpvclient._changed.wait_for(lambda seen=seen: mpvclient._version["n"] != seen, timeout=EVENTS_S)
                     seen = mpvclient._version["n"]
                 data = json.dumps(status_view(), ensure_ascii=False)
                 self.wfile.write(f"data: {data}\n\n".encode() if data != last else b": still here\n\n")
@@ -169,17 +218,19 @@ class UiH(H):
             body = json.loads(self.rfile.read(n) or b"{}") if 0 <= n <= 65536 else None
             if path == "/settings":
                 if not isinstance(body, dict) or not isinstance(body.get("values"), dict):
-                    return self.reply(400, {"error": "body: {\"values\": {...}}"})
+                    return self.reply(400, {"error": 'body: {"values": {...}}'})
                 return self.reply(200, settings.save_settings(body["values"]))
             if path == "/favorites":
                 if not isinstance(body, dict):
-                    return self.reply(400, {"error": "body: {\"favorites\": [...]}"})
+                    return self.reply(400, {"error": 'body: {"favorites": [...]}'})
                 return self.reply(200, {"favorites": init7.save_favorites(body.get("favorites"))})
             if path == "/restart":
                 if not config.SUPERVISOR_TOKEN:
                     return self.reply(502, {"error": "restart needs the Supervisor API (hassio_api)"})
                 self.reply(200, {"ok": True})
-                threading.Thread(target=lambda: (time.sleep(0.5), settings.supervisor_call("/addons/self/restart")), daemon=True).start()
+                threading.Thread(
+                    target=lambda: (time.sleep(0.5), settings.supervisor_call("/addons/self/restart")), daemon=True
+                ).start()
                 return
             return self.reply(404, {"error": "unknown endpoint"})
         except ValueError as e:
@@ -191,14 +242,17 @@ class UiH(H):
         if not config.ui_client_ok(self.client_address[0]):
             return self.reply(403, {"error": "forbidden"})
         path = urllib.parse.urlparse(self.path).path
-        static = {"/": (config.UI_FILE, "text/html; charset=utf-8"), "/index.html": (config.UI_FILE, "text/html; charset=utf-8"),
-                  "/logo.png": (config.UI_LOGO, "image/png")}
+        static = {
+            "/": (config.UI_FILE, "text/html; charset=utf-8"),
+            "/index.html": (config.UI_FILE, "text/html; charset=utf-8"),
+            "/logo.png": (config.UI_LOGO, "image/png"),
+        }
         if path in static:
             try:
                 body = open(static[path][0], "rb").read()
             except OSError:
                 return self.reply(404, {"error": "file missing"})
-            if static[path][0] == config.UI_FILE:                            # the page's texts come from i18n/<lang>.json
+            if static[path][0] == config.UI_FILE:  # the page's texts come from i18n/<lang>.json
                 body = body.replace(b"/*I18N*/{}", config.UI_TEXTS)
             self.send_response(200)
             self.send_header("Content-Type", static[path][1])

@@ -1,16 +1,24 @@
 """Configuration of the app: version, paths, web UI and Supervisor access, texts (i18n), log lines."""
+
 import glob
 import ipaddress
 import json
 import os
 import time
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # the folder with control.py, ui.html, i18n/, translations/
+# the folder with control.py, ui.html, i18n/, translations/
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-UI_PORT = int(os.environ.get("TV7_UI_PORT", "0"))                       # 0 = no web UI
-UI_BIND = os.environ.get("TV7_UI_BIND", "172.30.32.1")                  # the app's address on the Supervisor's network (Ingress connects here)
-UI_ALLOW = [ipaddress.ip_network(x.strip(), strict=False) for x in os.environ.get("TV7_UI_ALLOW", "172.30.32.2").split(",") if x.strip()]  # the Supervisor's address (Ingress); networks allowed (for development)
+UI_PORT = int(os.environ.get("TV7_UI_PORT", "0"))  # 0 = no web UI
+# the app's address on the Supervisor's network (Ingress connects here)
+UI_BIND = os.environ.get("TV7_UI_BIND", "172.30.32.1")
+# the Supervisor's address (Ingress); networks allowed (for development)
+UI_ALLOW = [
+    ipaddress.ip_network(x.strip(), strict=False)
+    for x in os.environ.get("TV7_UI_ALLOW", "172.30.32.2").split(",")
+    if x.strip()
+]
 
 
 def app_version():
@@ -19,8 +27,14 @@ def app_version():
     if not DEV_RELOAD:
         return VERSION
     stamp = 0
-    for f in (UI_FILE, UI_LOGO, os.path.join(ROOT, "control.py"), *glob.glob(os.path.join(ROOT, "tv7", "*.py")),
-              *glob.glob(os.path.join(TRANSLATIONS, "*.yaml")), *glob.glob(os.path.join(ROOT, "i18n", "*.json"))):
+    for f in (
+        UI_FILE,
+        UI_LOGO,
+        os.path.join(ROOT, "control.py"),
+        *glob.glob(os.path.join(ROOT, "tv7", "*.py")),
+        *glob.glob(os.path.join(TRANSLATIONS, "*.yaml")),
+        *glob.glob(os.path.join(ROOT, "i18n", "*.json")),
+    ):
         try:
             stamp = max(stamp, os.stat(f).st_mtime_ns)
         except OSError:
@@ -44,8 +58,8 @@ OPTIONS_FILE = os.environ.get("TV7_OPTIONS", "/data/options.json")
 SUPERVISOR = os.environ.get("TV7_SUPERVISOR", "http://supervisor")
 SUPERVISOR_TOKEN = os.environ.get("SUPERVISOR_TOKEN", "")
 TRANSLATIONS = os.environ.get("TV7_TRANSLATIONS", os.path.join(ROOT, "translations"))
-VERSION = os.environ.get("TV7_VERSION", "")                              # app version (build argument of the image)
-DEV_RELOAD = os.environ.get("TV7_DEV_RELOAD") == "1"                     # development only (dev/run-web.sh): live reload of the web UI
+VERSION = os.environ.get("TV7_VERSION", "")  # app version (build argument of the image)
+DEV_RELOAD = os.environ.get("TV7_DEV_RELOAD") == "1"  # development only (dev/run-web.sh): live reload of the web UI
 STARTED = time.time()
 # Texts of the web UI ("ui") and of the TV menu, banner and technical info ("tv") in English, German, French and Italian: one file
 # per language. The option names and descriptions are in translations/<lang>.yaml (Home Assistant's format for the configuration page).
@@ -56,4 +70,4 @@ UI_TEXTS = json.dumps({lg: d["ui"] for lg, d in I18N.items()}, ensure_ascii=Fals
 
 
 def log_line(msg):
-    print(">>> " + msg, flush=True)                               # goes to the app log
+    print(">>> " + msg, flush=True)  # goes to the app log

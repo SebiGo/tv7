@@ -1,0 +1,96 @@
+"""Parsers and helpers of tv7/display.py, called directly: DRM planes, output mode resolution, the PNG decoder."""
+
+import os
+import struct
+import zlib
+
+import pytest
+
+from fakes import APP_DIR, MODETEST_OUT, ROOTFS
+from tv7 import display
+
+PLANE_HEAD = "Planes:\nid\tcrtc\tfb\tCRTC x,y\tx,y\tgamma size\tpossible crtcs\n"
+TYPE = "\t8 type:\n\t\tenums: Overlay=0 Primary=1 Cursor=2\n\t\tvalue: {}\n"
+BLEND = "\t39 pixel blend mode:\n\t\tenums: None=2 Pre-multiplied=0 Coverage=1\n\t\tvalue: {}\n"
+
+
+def test_planes_with_a_picture():
+    text = (PLANE_HEAD + "32\t0\t0\t0,0\t\t0,0\t0\t0x1\n  props:\n" + TYPE.format(1)
+            + "40\t71\t88\t0,0\t\t0,0\t0\t0x1\n  props:\n" + TYPE.format(0) + "\t38 alpha:\n\t\tvalues: 0 65535\n\t\tvalue: 65535\n"
+            + BLEND.format(1) + "\t41 zpos:\n\t\tvalue: 2\n")  # fmt: skip
+    assert display.parse_planes(text) == [
+        {
+            "id": 40,
+            "crtc": 71,
+            "fb": 88,
+            "type": "Overlay",
+            "alpha": "65535",
+            "pixel blend mode": "Coverage",
+            "zpos": "2",
+        }
+    ]
+
+
+def test_plane_fixes():
+    """Overlay plane left at alpha 3084 / Coverage (seen on the Pi 5): set to opaque and pre-multiplied; others untouched."""
+    text = (PLANE_HEAD + "83\t71\t90\t0,0\t\t0,0\t0\t0x1\n  props:\n" + TYPE.format(1) + "\t38 alpha:\n\t\tvalues: 0 65535\n\t\tvalue: 65535\n"
+            + "107\t71\t91\t0,0\t\t0,0\t0\t0x1\n  props:\n" + TYPE.format(0) + "\t38 alpha:\n\t\tvalues: 0 65535\n\t\tvalue: 3084\n"
+            + BLEND.format(1)
+            + "108\t0\t0\t0,0\t\t0,0\t0\t0x1\n  props:\n" + TYPE.format(0) + "\t38 alpha:\n\t\tvalue: 65535\n" + BLEND.format(0))  # fmt: skip
+    assert display.plane_fixes(text) == ["107:alpha:65535", "107:pixel blend mode:0"]
+
+
+@pytest.fixture
+def modetest(world, monkeypatch):
+    """resolve(mode, hz, port="", without_1080p=False): (mode, note) from the fake modetest."""
+    other = world.write_modetest("modetest2", MODETEST_OUT.replace("1920x1080 ", "1680x1050 "))
+
+    def resolve(mode, hz, port="", without_1080p=False):
+        monkeypatch.setattr(display, "MODETEST", other if without_1080p else f"{world.tmp}/modetest")
+        monkeypatch.setattr(display, "DRM_DIR", world.drm)
+        return display.resolve_mode(mode, hz, port)
+
+    return resolve
+
+
+def test_resolve_presets(modetest):
+    assert modetest("1080p", "50", "HDMI-A-1")[0] == "3", "the progressive 50 Hz mode, not the interlaced one"
+    assert modetest("1080p", "60")[0] == "4", "59.94 Hz"
+    assert modetest("2160p", "50")[0] == "1"
+    mode, note = modetest("720p", "50")
+    assert mode == "preferred" and "not offered" in note
+    assert modetest("1080p", "50", "HDMI-A-9")[0] == "preferred", "unknown port"
+
+
+def test_resolve_auto(modetest):
+    """auto means 1080p when the display offers it, starting at 50 Hz (or at the asked rate); highest passes through."""
+    assert modetest("auto", "auto")[0] == "3" and modetest("auto", "50")[0] == "3" and modetest("auto", "60")[0] == "4"
+    assert modetest("highest", "50")[0] == "highest"
+    assert modetest("1080p", "auto")[0] == "3" and modetest("2160p", "auto")[0] == "1", (
+        "fixed size, rate follows: 50 Hz"
+    )
+    assert modetest("auto", "auto", without_1080p=True)[0] == "1", "no 1080p: the preferred size at 50 Hz"
+    assert modetest("auto", "50", without_1080p=True)[0] == "1"
+
+
+def test_idle_logo_bgra():
+    """The logo PNG becomes premultiplied BGRA for mpv's overlay-add."""
+    w, h, raw = display.png_to_bgra(os.path.join(ROOTFS, "ui-logo.png"))
+    px = [raw[i : i + 4] for i in range(0, len(raw), 4)]
+    assert (w, h) == (360, 188) and len(raw) == 360 * 188 * 4
+    assert px[0] == b"\0\0\0\0", "transparent corner"
+    assert any(p[3] == 255 and p[2] > 200 and p[0] < 150 for p in px), "opaque logo colour"
+    assert all(max(p[:3]) <= p[3] for p in px), "premultiplied alpha everywhere"
+
+
+def test_png_decoder_refuses_bad_input():
+    with pytest.raises(ValueError, match="not a PNG"):
+        display.png_to_bgra(os.path.join(APP_DIR, "config.yaml"))  # the idle screen then stays black
+
+    def chunk(k, d):
+        return struct.pack(">I", len(d)) + k + d + struct.pack(">I", zlib.crc32(k + d))
+
+    huge = (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 20000, 20000, 8, 6, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(bytes(1000000))) + chunk(b"IEND", b""))  # fmt: skip
+    with pytest.raises(ValueError, match="too large"):
+        display.png_bytes_to_bgra(huge)  # no memory/CPU exhaustion through a logo

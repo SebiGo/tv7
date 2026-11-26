@@ -30,6 +30,7 @@ Only streams from the Init7 channel list are played (no free-form URLs). If a st
 a second attempt is made; for multicast, the next step is a fallback to HLS. The HDMI state is only read
 (the app runs with protection mode on, /sys is read-only).
 """
+
 import os
 import signal
 import sys
@@ -37,32 +38,39 @@ import threading
 import time
 from http.server import ThreadingHTTPServer
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))   # the package tv7 next to this file (also with python -I)
+# the package tv7 next to this file (also with python -I)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from tv7 import cec, config, mpvclient, mpvhost, player, settings, tvosd, web  # noqa: E402
-
 
 if __name__ == "__main__":
     # control.py                    production (run.sh): starts and supervises mpv
     # control.py <socket> <port>    attach to an mpv someone else runs (tests, dev/run-web.sh)
     attach = len(sys.argv) > 2
-    mpvclient.SOCK, port = (sys.argv[1], int(sys.argv[2])) if attach else ("/tmp/mpv.sock", int(os.environ.get("TV7_API_PORT", "8765")))
+    mpvclient.SOCK, port = (
+        (sys.argv[1], int(sys.argv[2])) if attach else ("/tmp/mpv.sock", int(os.environ.get("TV7_API_PORT", "8765")))
+    )
     if not attach and "TV7_UI_PORT" not in os.environ:
-        config.UI_PORT = 8099                                          # Home Assistant Ingress (web UI in the sidebar)
+        config.UI_PORT = 8099  # Home Assistant Ingress (web UI in the sidebar)
     signal.signal(signal.SIGTERM, mpvhost.stop_app)
     signal.signal(signal.SIGINT, mpvhost.stop_app)
     settings.init_settings()
-    mpvclient.mpv_log()                                                       # collect mpv's log from the start (nerd mode, support text)
+    mpvclient.mpv_log()  # collect mpv's log from the start (nerd mode, support text)
     threading.Thread(target=player.watcher, daemon=True).start()
     threading.Thread(target=tvosd.osd_loop, daemon=True).start()
     threading.Thread(target=tvosd.ha_language_loop, daemon=True).start()
-    threading.Thread(target=lambda: cec.cec_setup(settings.current_values().get("cec", "auto") != "off"), daemon=True).start()
-    api_server = ThreadingHTTPServer(("127.0.0.1", port), web.H)         # only Home Assistant on this device, never the network
+    threading.Thread(
+        target=lambda: cec.cec_setup(settings.current_values().get("cec", "auto") != "off"), daemon=True
+    ).start()
+    # only Home Assistant on this device, never the network
+    api_server = ThreadingHTTPServer(("127.0.0.1", port), web.H)
     threading.Thread(target=api_server.serve_forever, daemon=True).start()
     if config.UI_PORT:
-        try:                                                        # only on the Supervisor's network, not on the LAN (host network)
+        try:  # only on the Supervisor's network, not on the LAN (host network)
             ui_server = ThreadingHTTPServer((config.UI_BIND, config.UI_PORT), web.UiH)
         except OSError as e:
-            config.log_line(f"Web UI: cannot listen on {config.UI_BIND} ({e}); listening on all interfaces, only the Supervisor is let in")
+            config.log_line(
+                f"Web UI: cannot listen on {config.UI_BIND} ({e}); listening on all interfaces, only the Supervisor is let in"
+            )
             ui_server = ThreadingHTTPServer(("0.0.0.0", config.UI_PORT), web.UiH)
         threading.Thread(target=ui_server.serve_forever, daemon=True).start()
     if attach:

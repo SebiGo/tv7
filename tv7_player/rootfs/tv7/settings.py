@@ -1,4 +1,5 @@
 """Settings: editable in the web UI and the TV menu, stored as the app's options by the Supervisor."""
+
 import json
 import os
 import re
@@ -15,29 +16,121 @@ def _c(*v):
 
 # key: type (choice|bool|int|str), choices, restart (needs an app restart), group, nerd (technical: the web UI shows it only in nerd mode or when it differs from the default)
 SETTINGS = [
-    {"key": "hdmi_port", "type": "choice", "choices": _c("auto", "HDMI-A-1", "HDMI-A-2"), "group": "video", "restart": True, "nerd": False},
-    {"key": "hdmi_disconnect", "type": "choice", "choices": _c("resume", "stop", "keep"), "group": "video", "restart": False, "nerd": False},
+    {
+        "key": "hdmi_port",
+        "type": "choice",
+        "choices": _c("auto", "HDMI-A-1", "HDMI-A-2"),
+        "group": "video",
+        "restart": True,
+        "nerd": False,
+    },
+    {
+        "key": "hdmi_disconnect",
+        "type": "choice",
+        "choices": _c("resume", "stop", "keep"),
+        "group": "video",
+        "restart": False,
+        "nerd": False,
+    },
     {"key": "cec", "type": "choice", "choices": _c("auto", "off"), "group": "video", "restart": True, "nerd": False},
-    {"key": "video_output", "type": "choice", "choices": _c("auto", "drm", "gpu"), "group": "video", "restart": True, "nerd": True},
-    {"key": "video_mode", "type": "choice", "choices": _c("auto", "highest", "2160p", "1080p", "720p"), "group": "video", "restart": True, "nerd": True},
-    {"key": "video_refresh", "type": "choice", "choices": _c("auto", "50", "60"), "group": "video", "restart": True, "nerd": True},
+    {
+        "key": "video_output",
+        "type": "choice",
+        "choices": _c("auto", "drm", "gpu"),
+        "group": "video",
+        "restart": True,
+        "nerd": True,
+    },
+    {
+        "key": "video_mode",
+        "type": "choice",
+        "choices": _c("auto", "highest", "2160p", "1080p", "720p"),
+        "group": "video",
+        "restart": True,
+        "nerd": True,
+    },
+    {
+        "key": "video_refresh",
+        "type": "choice",
+        "choices": _c("auto", "50", "60"),
+        "group": "video",
+        "restart": True,
+        "nerd": True,
+    },
     {"key": "deinterlace", "type": "bool", "group": "video", "restart": False, "nerd": True},
-    {"key": "hardware_decoding", "type": "choice", "choices": _c("auto", "no"), "group": "video", "restart": True, "nerd": True},
-    {"key": "decode_speed", "type": "choice", "choices": _c("quality", "fast"), "group": "video", "restart": True, "nerd": True},
-    {"key": "audio_output", "type": "choice", "choices": _c("auto", "pulseaudio", "alsa"), "group": "audio", "restart": True, "nerd": True},
+    {
+        "key": "hardware_decoding",
+        "type": "choice",
+        "choices": _c("auto", "no"),
+        "group": "video",
+        "restart": True,
+        "nerd": True,
+    },
+    {
+        "key": "decode_speed",
+        "type": "choice",
+        "choices": _c("quality", "fast"),
+        "group": "video",
+        "restart": True,
+        "nerd": True,
+    },
+    {
+        "key": "audio_output",
+        "type": "choice",
+        "choices": _c("auto", "pulseaudio", "alsa"),
+        "group": "audio",
+        "restart": True,
+        "nerd": True,
+    },
     {"key": "audio_device", "type": "str", "group": "audio", "restart": False, "nerd": True},
-    {"key": "audio_language", "type": "choice", "choices": _c("auto", "deu", "fra", "ita", "eng", "roh"), "group": "audio", "restart": False, "nerd": False},
-    {"key": "audio_channels", "type": "choice", "choices": _c("auto", "stereo"), "group": "audio", "restart": False, "nerd": False},
+    {
+        "key": "audio_language",
+        "type": "choice",
+        "choices": _c("auto", "deu", "fra", "ita", "eng", "roh"),
+        "group": "audio",
+        "restart": False,
+        "nerd": False,
+    },
+    {
+        "key": "audio_channels",
+        "type": "choice",
+        "choices": _c("auto", "stereo"),
+        "group": "audio",
+        "restart": False,
+        "nerd": False,
+    },
     {"key": "start_volume", "type": "int", "min": 0, "max": 130, "group": "audio", "restart": False, "nerd": False},
-    {"key": "idle_stop", "type": "choice", "choices": _c("off", "60", "120", "180", "240", "480"), "group": "system", "restart": False, "nerd": False},
+    {
+        "key": "idle_stop",
+        "type": "choice",
+        "choices": _c("off", "60", "120", "180", "240", "480"),
+        "group": "system",
+        "restart": False,
+        "nerd": False,
+    },
     {"key": "debug", "type": "bool", "group": "system", "restart": True, "nerd": True},
 ]
 BY_KEY = {x["key"]: x for x in SETTINGS}
-DEFAULTS = {"hdmi_port": "auto", "hdmi_disconnect": "resume", "video_output": "auto", "video_mode": "auto", "video_refresh": "auto", "deinterlace": True, "hardware_decoding": "auto", "decode_speed": "quality", "audio_output": "auto",
-            "audio_device": "", "audio_language": "auto", "audio_channels": "auto", "cec": "auto",
-            "start_volume": 100, "idle_stop": "off", "debug": False}
-_applied = {}       # what the running process actually uses (restart-only settings keep their start value)
-_saved = {}         # values saved through the UI (the options file may lag behind)
+DEFAULTS = {
+    "hdmi_port": "auto",
+    "hdmi_disconnect": "resume",
+    "video_output": "auto",
+    "video_mode": "auto",
+    "video_refresh": "auto",
+    "deinterlace": True,
+    "hardware_decoding": "auto",
+    "decode_speed": "quality",
+    "audio_output": "auto",
+    "audio_device": "",
+    "audio_language": "auto",
+    "audio_channels": "auto",
+    "cec": "auto",
+    "start_volume": 100,
+    "idle_stop": "off",
+    "debug": False,
+}
+_applied = {}  # what the running process actually uses (restart-only settings keep their start value)
+_saved = {}  # values saved through the UI (the options file may lag behind)
 
 
 def read_options():
@@ -70,10 +163,10 @@ def apply_live(key, val):
         elif key == "start_volume":
             mpvclient.mpv("set_property", "volume", float(val))
         elif key in ("hdmi_disconnect", "idle_stop"):
-            pass                                                     # read by the watcher on every check
+            pass  # read by the watcher on every check
         elif key == "audio_device":
             if not val:
-                return False                                         # back to the automatic choice needs a restart
+                return False  # back to the automatic choice needs a restart
             mpvclient.mpv("set_property", "audio-device", val)
         else:
             return False
@@ -101,6 +194,7 @@ def labels(lang):
     for code in ("en", lang):
         try:
             import yaml
+
             d = yaml.safe_load(open(os.path.join(config.TRANSLATIONS, f"{code}.yaml")))["configuration"]
             for k, v in d.items():
                 out[k] = {"name": v.get("name", k), "description": v.get("description", "")}
@@ -123,17 +217,26 @@ def settings_view(lang="en"):
         if k == "hdmi_port":
             it["unavailable"] = [c for c in spec["choices"] if c != "auto" and c not in [p["name"] for p in ports]]
         elif k == "video_mode":
-            it["unavailable"] = [c for c in spec["choices"] if c in display.VIDEO_PRESETS and display.VIDEO_PRESETS[c] not in sizes]
+            it["unavailable"] = [
+                c for c in spec["choices"] if c in display.VIDEO_PRESETS and display.VIDEO_PRESETS[c] not in sizes
+            ]
         elif k == "video_refresh":
             it["unavailable"] = [c for c in spec["choices"] if c != "auto" and hz and c not in hz]
         elif k == "cec" and cec.cec_state["state"] in cec.CEC_LOCKED:
-            it["locked"] = cec.cec_state["state"]                      # the web UI greys the option out and says why
+            it["locked"] = cec.cec_state["state"]  # the web UI greys the option out and says why
         elif k == "audio_device":
             it["suggestions"] = [d for d in devs if d.split("/")[0] in ("pulse", "alsa") and "hdmi" in d.lower()]
         items.append(it)
     cur = current_values()
-    return {"items": items, "values": cur, "labels": labels(lang), "pending_restart": pending_restart(cur),
-            "can_save": bool(config.SUPERVISOR_TOKEN), "defaults": DEFAULTS, "version": config.app_version()}
+    return {
+        "items": items,
+        "values": cur,
+        "labels": labels(lang),
+        "pending_restart": pending_restart(cur),
+        "can_save": bool(config.SUPERVISOR_TOKEN),
+        "defaults": DEFAULTS,
+        "version": config.app_version(),
+    }
 
 
 def validate_setting(key, val):
@@ -157,8 +260,12 @@ def validate_setting(key, val):
 
 
 def supervisor_call(path, payload=None):
-    req = urllib.request.Request(config.SUPERVISOR + path, data=json.dumps(payload or {}).encode(), method="POST",
-                                 headers={"Authorization": f"Bearer {config.SUPERVISOR_TOKEN}", "Content-Type": "application/json"})
+    req = urllib.request.Request(
+        config.SUPERVISOR + path,
+        data=json.dumps(payload or {}).encode(),
+        method="POST",
+        headers={"Authorization": f"Bearer {config.SUPERVISOR_TOKEN}", "Content-Type": "application/json"},
+    )
     with urllib.request.urlopen(req, timeout=20) as r:
         return json.load(r)
 
@@ -172,8 +279,8 @@ def save_settings(values):
         validate_setting(k, v)
     if not config.SUPERVISOR_TOKEN:
         raise RuntimeError("saving needs the Supervisor API (hassio_api); not available here")
-    merged = {**read_options(), **values}                            # keeps the options not shown in the web UI
-    for k in OBSOLETE_OPTIONS:                                       # options of older versions the schema no longer has
+    merged = {**read_options(), **values}  # keeps the options not shown in the web UI
+    for k in OBSOLETE_OPTIONS:  # options of older versions the schema no longer has
         merged.pop(k, None)
     try:
         supervisor_call("/addons/self/options", {"options": merged})
@@ -182,7 +289,7 @@ def save_settings(values):
             msg = json.load(e).get("message", str(e))
         except Exception:
             msg = str(e)
-        raise RuntimeError(f"Supervisor rejected the options: {msg}")
+        raise RuntimeError(f"Supervisor rejected the options: {msg}") from e
     _saved.update(values)
     live = [k for k, v in values.items() if apply_live(k, v)]
     mpvclient.changed()
