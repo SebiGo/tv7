@@ -4,7 +4,6 @@ What the TV tells goes to `handlers` (set at start in control.py): remote contro
 the TV shows. This module only talks to the bus; what playback does about it is in tv7/player.py."""
 
 import glob
-import os
 import re
 import subprocess
 import threading
@@ -12,31 +11,26 @@ import time
 
 from tv7 import config, supervisor
 
-CEC_CTL = os.environ.get("TV7_CEC_CTL", "cec-ctl")
-CEC_GLOB = os.environ.get("TV7_CEC_GLOB", "/dev/cec*")
 CEC_NAME = "TV7"  # OSD name: how the app shows up in the TV's/projector's device list
-# wait this long for Home Assistant Core to finish starting
-CEC_CORE_WAIT_S = float(os.environ.get("TV7_CEC_CORE_WAIT_S", "300"))
-CEC_CORE_POLL_S = float(os.environ.get("TV7_CEC_CORE_POLL_S", "10"))
 cec_state = {"state": "off", "device": None, "detail": None, "devices": [], "topology": []}
 CEC_LOCKED = ("ha_integration", "in_use")  # states in which the web UI greys out the option
 
 
 def ha_cec_integration():
     """Wait until Home Assistant Core has started (its integrations are loaded), then tell whether its HDMI-CEC integration
-    runs. None: Core not reachable (no Supervisor, or not started within CEC_CORE_WAIT_S)."""
-    end = time.time() + CEC_CORE_WAIT_S
+    runs. None: Core not reachable (no Supervisor, or not started within config.CEC_CORE_WAIT_S)."""
+    end = time.time() + config.CEC_CORE_WAIT_S
     while True:
         cfg = supervisor.core_config()
         if cfg and str(cfg.get("state", "RUNNING")).upper() == "RUNNING":
             return "hdmi_cec" in (cfg.get("components") or [])
         if not supervisor.available() or time.time() >= end:
             return None
-        time.sleep(CEC_CORE_POLL_S)
+        time.sleep(config.CEC_CORE_POLL_S)
 
 
 def _cec(dev, *args, timeout=20):
-    r = subprocess.run([CEC_CTL, "-d", dev, *args], capture_output=True, text=True, timeout=timeout)
+    r = subprocess.run([config.CEC_CTL, "-d", dev, *args], capture_output=True, text=True, timeout=timeout)
     return r.returncode, r.stdout + r.stderr
 
 
@@ -68,9 +62,9 @@ def parse_cec_topology(text):
     return devices, [t.expandtabs(4).rstrip() for t in topo if t.strip()]
 
 
-CEC_LOG_LINES = int(os.environ.get("TV7_CEC_LOG_LINES", "300"))
+CEC_LOG_LINES = 300
 # a receiver that ends this fast did not work: try the next one
-CEC_MON_FAIL_S = float(os.environ.get("TV7_CEC_MON_FAIL_S", "3"))
+CEC_MON_FAIL_S = 3.0
 _cec_log = []
 _cec_log_lock = threading.Lock()
 
@@ -92,11 +86,11 @@ def cec_monitor(dev):
     If it ends later it is started again; if it ends at once, it does not work here."""
     args = ["-W", "-w"]
     while True:
-        cec_log_add(f"--- {CEC_CTL} -d {dev} {' '.join(args)} ---")
+        cec_log_add(f"--- {config.CEC_CTL} -d {dev} {' '.join(args)} ---")
         t0 = time.time()
         try:
             proc = subprocess.Popen(
-                [CEC_CTL, "-d", dev, *args], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
+                [config.CEC_CTL, "-d", dev, *args], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
             )
             for line in proc.stdout:
                 if line.strip():
@@ -118,7 +112,7 @@ def cec_setup(enabled):
     """Checked once at app start. Option cec off: leave CEC alone (and remove the app's own registration of an earlier start).
     auto: wait for Home Assistant Core; if its HDMI-CEC integration runs, or another program registered on the port, stay out.
     Otherwise register as playback device "TV7" on the adapter of the connected HDMI port and read which devices are on the bus."""
-    devs = sorted(glob.glob(CEC_GLOB))
+    devs = sorted(glob.glob(config.CEC_GLOB))
 
     def read_infos():
         out = []
@@ -156,7 +150,7 @@ def cec_setup(enabled):
     infos = read_infos()  # after the wait: the port as it is now
     usable = [(d, i) for d, i in infos if i]
     if not usable:
-        cec_state.update(state="error", detail=f"{CEC_CTL} failed on {', '.join(devs)}")
+        cec_state.update(state="error", detail=f"{config.CEC_CTL} failed on {', '.join(devs)}")
         return
     # The adapter of the connected port has a physical address (f.f.f.f = nothing connected).
     dev, info = next(

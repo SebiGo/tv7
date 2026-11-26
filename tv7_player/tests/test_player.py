@@ -8,7 +8,7 @@ import threading
 import pytest
 
 from fakes import wait_for
-from tv7 import display, hwdec, mpvhost
+from tv7 import config, display, hwdec, mpvhost
 
 HELP_PI = "Valid values (with alternative full names):\n  drm (hevc-drm)\n  drm-copy (hevc-drm-copy)\n  v4l2m2m-copy (h264_v4l2m2m-v4l2m2m-copy)"
 HELP_X86 = "Valid values (with alternative full names):\n  vaapi (h264-vaapi)\n  vaapi-copy (h264-vaapi-copy)"
@@ -72,8 +72,8 @@ def fake_mpv(tmp_path, monkeypatch):
     """A fake mpv program at tmp_path/mpv (write its script with fake_mpv(text)); no display connected."""
     os.makedirs(tmp_path / "drm" / "card1-HDMI-A-1")
     (tmp_path / "drm" / "card1-HDMI-A-1" / "status").write_text("disconnected\n")
-    monkeypatch.setattr(display, "DRM_DIR", str(tmp_path / "drm"))
-    monkeypatch.setattr(display, "MODETEST", "true")
+    monkeypatch.setattr(config, "DRM_DIR", str(tmp_path / "drm"))
+    monkeypatch.setattr(config, "MODETEST", "true")
     monkeypatch.setattr(mpvhost, "MPV_BIN", str(tmp_path / "mpv"))
 
     def write(script):

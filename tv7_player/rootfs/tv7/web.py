@@ -5,15 +5,12 @@ returns (status code, JSON body), or None when it wrote the answer itself (logos
 place (_dispatch): KeyError 404, ValueError 400, PermissionError 403, anything else 502."""
 
 import json
-import os
 import urllib.error
 import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler
 
 from tv7 import cec, config, display, init7, mpvclient, player, settings, supervisor, support, system, tvinfo, tvmenu
-
-EVENTS_S = float(os.environ.get("TV7_EVENTS_S", "3"))  # /events: at least this often (live values)
 
 
 def status_view():
@@ -129,7 +126,7 @@ def get_icon(h, q):
 
 
 def get_events(h, q):
-    """Server-sent events: the status (as /status) at once, then whenever it changes, and at least every EVENTS_S (CPU load,
+    """Server-sent events: the status (as /status) at once, then whenever it changes, and at least every config.EVENTS_S (CPU load,
     temperature and dropped frames change all the time). Ends when the client goes away."""
     h.send_response(200)
     h.send_header("Content-Type", "text/event-stream")
@@ -139,7 +136,7 @@ def get_events(h, q):
     seen, last = None, None
     try:
         while True:
-            seen = mpvclient.wait_change(seen, EVENTS_S)
+            seen = mpvclient.wait_change(seen, config.EVENTS_S)
             data = json.dumps(status_view(), ensure_ascii=False)
             h.wfile.write(f"data: {data}\n\n".encode() if data != last else b": still here\n\n")
             h.wfile.flush()

@@ -1,17 +1,16 @@
 """The TV menu, the channel banner and the remote control keys (CEC or /key), drawn with tv7/tvdraw.py.
 
 Menu: OK opens it; up/down move, left/right switch tabs (channels, audio, subtitles, settings), OK selects, back closes; it
-closes by itself after MENU_TIMEOUT_S. Without the menu: channel up/down zap, digits choose a channel number, info toggles
+closes by itself after config.MENU_TIMEOUT_S. Without the menu: channel up/down zap, digits choose a channel number, info toggles
 the technical info. Every channel start shows a banner."""
 
-import os
 import socket
 import threading
 import time
 
 from tv7 import cec, config, init7, mpvclient, player, settings, supervisor, tvdraw, tvinfo
 
-OSD_S = float(os.environ.get("TV7_OSD_S", "1"))  # refresh interval of the overlay
+OSD_S = 1.0  # refresh interval of the overlay
 
 
 def osd_loop():
@@ -33,9 +32,7 @@ def osd_loop():
 MENU_ID, BANNER_ID, MENU_BG_ID, BANNER_BG_ID = 8, 9, 10, 11
 # overlay-add slots: brand logo, banner logo, row logos 20..31 (idle logo: 0)
 OVL_BRAND, OVL_BANNER, OVL_ROWS = 19, 32, 20
-MENU_TIMEOUT_S = float(os.environ.get("TV7_MENU_TIMEOUT_S", "12"))
-BANNER_S = float(os.environ.get("TV7_BANNER_S", "4"))
-DIGIT_S = float(os.environ.get("TV7_DIGIT_S", "1.6"))  # pause after the last digit before the channel number is taken
+BANNER_S = 4.0
 MENU_ROWS, ROW_H = 10, 66
 TABS = ("channels", "audio", "subs", "settings")
 LANG_NAMES = {
@@ -514,8 +511,8 @@ def _digit(d):
     digits["buf"] = (digits["buf"] + d)[-4:]
     if digits["timer"]:
         digits["timer"].cancel()
-    show_banner(digits_text=digits["buf"], seconds=DIGIT_S + 1)
-    digits["timer"] = threading.Timer(DIGIT_S, _digit_commit)
+    show_banner(digits_text=digits["buf"], seconds=config.DIGIT_S + 1)
+    digits["timer"] = threading.Timer(config.DIGIT_S, _digit_commit)
     digits["timer"].daemon = True
     digits["timer"].start()
 
@@ -577,10 +574,10 @@ def handle_key(key):
 
 
 def menu_tick():
-    """Called about once a second: close the menu after MENU_TIMEOUT_S without a key, hide the banner when its time is up."""
+    """Called about once a second: close the menu after config.MENU_TIMEOUT_S without a key, hide the banner when its time is up."""
     with _menu_lock:
         now = time.time()
-        if menu["open"] and now - menu["t"] >= MENU_TIMEOUT_S:
+        if menu["open"] and now - menu["t"] >= config.MENU_TIMEOUT_S:
             close_menu()
         if banner["shown"] and now >= banner["until"]:
             hide_banner()

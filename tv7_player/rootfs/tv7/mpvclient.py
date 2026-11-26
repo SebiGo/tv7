@@ -1,7 +1,6 @@
 """Talking to mpv over its IPC socket: commands and properties (one connection that stays open), the log and change notifications (a second connection), the tracks of the running stream."""
 
 import json
-import os
 import socket
 import threading
 import time
@@ -71,7 +70,7 @@ def playing():
     return prop("idle-active") is False and bool(prop("video-codec")) and (prop("time-pos") or 0) > 0
 
 
-LOG_LINES = int(os.environ.get("TV7_LOG_LINES", "150"))
+LOG_LINES = 150
 _mpv_log = []  # last mpv log messages (ring buffer)
 _log_lock = threading.Lock()
 _log_thread = {"started": False}

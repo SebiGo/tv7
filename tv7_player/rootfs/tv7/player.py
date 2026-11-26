@@ -4,15 +4,11 @@ automatic stops and resumes (HDMI display gone, no operation, TV switched away o
 The playback state is `state`. Only this module changes it; the web UI, the TV menu and the support text read it."""
 
 import concurrent.futures
-import os
 import threading
 import time
 from dataclasses import dataclass, field
 
 from tv7 import cec, config, display, init7, mpvclient, settings
-
-START_TIMEOUT = float(os.environ.get("TV7_START_TIMEOUT", "10"))
-MODE_WAIT_S = float(os.environ.get("TV7_MODE_WAIT_S", "25"))
 
 
 @dataclass
@@ -66,7 +62,7 @@ def restart_mpv(log, reason):
         mpvclient.mpv("quit")
     except Exception:
         pass
-    end = time.time() + MODE_WAIT_S
+    end = time.time() + config.MODE_WAIT_S
     while time.time() < end:  # wait for the NEW mpv (different pid) to answer
         time.sleep(0.4)
         pid = mpvclient.prop("pid")
@@ -161,14 +157,14 @@ def _start(ch, source):
             # every channel starts without subtitles (track picker turns them on)
             mpvclient.mpv("set_property", "sid", "no")
             mpvclient.mpv("loadfile", url, "replace")
-            end = time.time() + START_TIMEOUT
+            end = time.time() + config.START_TIMEOUT
             while time.time() < end:
                 if mpvclient.playing():
                     log.append(f"{src}: started (attempt {attempt})")
                     state.current.update(pk=ch["pk"], name=ch["name"], source=src)
                     if match_refresh(log):  # mpv restarted with a new output mode: play the channel again
                         mpvclient.mpv("loadfile", url, "replace")
-                        t_end = time.time() + START_TIMEOUT
+                        t_end = time.time() + config.START_TIMEOUT
                         while time.time() < t_end and not mpvclient.playing():
                             time.sleep(0.5)
                     display.update_deinterlace()
@@ -188,7 +184,7 @@ def _start(ch, source):
                         pass
                     return {"ok": False, "channel": ch["name"], "log": log, "reason": "no_display"}
                 time.sleep(0.5)
-            log.append(f"{src}: attempt {attempt} did not start within {START_TIMEOUT:g} s")
+            log.append(f"{src}: attempt {attempt} did not start within {config.START_TIMEOUT:g} s")
     return {"ok": False, "channel": ch["name"], "log": log}
 
 
@@ -218,14 +214,9 @@ def match_refresh(log):
     return True
 
 
-HDMI_OFF_S = float(os.environ.get("TV7_HDMI_OFF_S", "15"))  # display gone this long: stop playback
-HDMI_BACK_S = float(os.environ.get("TV7_HDMI_BACK_S", "3"))  # display back this long: resume
-HDMI_POLL_S = float(os.environ.get("TV7_HDMI_POLL_S", "2"))
-
-
 def hdmi_watch_step(timers):
-    """One check. Stops playback when no HDMI display is connected for HDMI_OFF_S and starts the same channel again when the
-    display is back for HDMI_BACK_S. timers keeps the times between calls."""
+    """One check. Stops playback when no HDMI display is connected for config.HDMI_OFF_S and starts the same channel again when the
+    display is back for config.HDMI_BACK_S. timers keeps the times between calls."""
     if not display.connectors():
         timers.clear()
         state.hdmi_stopped.clear()
@@ -240,9 +231,9 @@ def hdmi_watch_step(timers):
     else:
         timers.pop("on_since", None)
         timers.setdefault("off_since", now)
-    if not ok and state.current["pk"] and not state.hdmi_stopped and now - timers["off_since"] >= HDMI_OFF_S:
+    if not ok and state.current["pk"] and not state.hdmi_stopped and now - timers["off_since"] >= config.HDMI_OFF_S:
         player(_hdmi_stop)
-    elif ok and state.hdmi_stopped and now - timers["on_since"] >= HDMI_BACK_S:
+    elif ok and state.hdmi_stopped and now - timers["on_since"] >= config.HDMI_BACK_S:
         ch = dict(state.hdmi_stopped)
         state.hdmi_stopped.clear()
         try:
@@ -266,12 +257,9 @@ def _hdmi_stop():
         pass
     _clear_current()
     config.log_line(
-        f"No HDMI display for {HDMI_OFF_S:g} s: playback of {state.hdmi_stopped['name']} stopped, it resumes when the display"
+        f"No HDMI display for {config.HDMI_OFF_S:g} s: playback of {state.hdmi_stopped['name']} stopped, it resumes when the display"
         " is back"
     )
-
-
-MINUTE_S = float(os.environ.get("TV7_MINUTE_S", "60"))  # overridable for tests
 
 
 def touch():
@@ -299,12 +287,9 @@ def _auto_stop(reason, text, extra):
 def autostop_step():
     """No operation for idle_stop minutes while a channel plays: stop, so the app does not load the system when nobody watches."""
     idle = settings.current_values().get("idle_stop", "off")
-    if idle != "off" and state.current["pk"] and time.time() - state.last_activity >= float(idle) * MINUTE_S:
+    if idle != "off" and state.current["pk"] and time.time() - state.last_activity >= float(idle) * config.MINUTE_S:
         name = state.current["name"]
         auto_stop("idle", f"No operation for {idle} min: playback of {name} stopped", minutes=int(idle))
-
-
-CEC_AWAY_S = float(os.environ.get("TV7_CEC_AWAY_S", "30"))  # the TV shows another source this long: stop
 
 
 def tv_standby():
@@ -313,7 +298,7 @@ def tv_standby():
 
 
 def tv_gone(reason):
-    """The TV switched to standby (at once) or to another source (after CEC_AWAY_S): stop like for a missing display, and
+    """The TV switched to standby (at once) or to another source (after config.CEC_AWAY_S): stop like for a missing display, and
     start the same channel again when the TV shows the app again."""
     player(_tv_gone, reason)
 
@@ -348,8 +333,8 @@ def tv_shown(ours):
 
 
 def tv_away_step():
-    """Called by the watcher: the TV has shown another source for CEC_AWAY_S."""
-    if state.tv_away_since is not None and time.time() - state.tv_away_since >= CEC_AWAY_S:
+    """Called by the watcher: the TV has shown another source for config.CEC_AWAY_S."""
+    if state.tv_away_since is not None and time.time() - state.tv_away_since >= config.CEC_AWAY_S:
         tv_gone("the TV shows another source")
 
 
@@ -362,4 +347,4 @@ def watcher():
                 step()
             except Exception as e:
                 config.log_line(f"Watcher error: {e}")
-        time.sleep(HDMI_POLL_S)
+        time.sleep(config.HDMI_POLL_S)

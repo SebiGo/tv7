@@ -39,3 +39,13 @@ def test_imports_go_down_only():
             if LAYER.get(dep, 99) >= layer:
                 wrong.append(f"{mod} (layer {layer}) imports {dep} (layer {LAYER.get(dep)})")
     assert not wrong, wrong
+
+
+def test_only_config_reads_the_environment():
+    """TV7_* settings for tests and development are read in one place: tv7/config.py."""
+    readers = []
+    for path in glob.glob(os.path.join(ROOTFS, "tv7", "*.py")):
+        with open(path) as f:
+            if "TV7_" in f.read() and not path.endswith("config.py"):
+                readers.append(os.path.basename(path))
+    assert not readers, readers

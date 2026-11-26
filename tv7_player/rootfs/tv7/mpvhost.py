@@ -10,12 +10,12 @@ from tv7 import config, display, hwdec, mpvclient, png, settings
 # control.py starts mpv itself (run.sh only starts control.py): it chooses the video output, hardware decoding, output mode and
 # audio device, starts mpv and starts it again whenever it ends (a crash must not leave the player dead; a channel start asks
 # for a restart with "quit" to change the output mode or to choose the video output once a display is there).
-MPV_BIN = os.environ.get("TV7_MPV", "mpv")
-WAIT_HDMI_S = float(os.environ.get("TV7_WAIT_HDMI_S", "60"))  # wait this long for a display at start
-RESTART_PAUSE_S = float(os.environ.get("TV7_RESTART_PAUSE", "1"))
+MPV_BIN = "mpv"
+WAIT_HDMI_S = 60.0  # wait this long for a display at start
+RESTART_PAUSE_S = 1.0
 # in RESTART_WINDOW_S: then mpv cannot start at all, stop trying
-MAX_RESTARTS = int(os.environ.get("TV7_MAX_RESTARTS", "8"))
-RESTART_WINDOW_S = float(os.environ.get("TV7_RESTART_WINDOW", "60"))
+MAX_RESTARTS = 8
+RESTART_WINDOW_S = 60.0
 IDLE_LOGO_RAW = "/tmp/tv7-idle.bgra"
 mpv_proc = {"p": None, "stop": False}
 

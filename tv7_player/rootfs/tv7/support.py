@@ -41,7 +41,7 @@ def redact(text):
     return _IPV6_MAC_RE.sub(MASK, text)
 
 
-APP_LOG_LINES = int(os.environ.get("TV7_APP_LOG_LINES", "120"))
+APP_LOG_LINES = 120
 
 
 def support_text():

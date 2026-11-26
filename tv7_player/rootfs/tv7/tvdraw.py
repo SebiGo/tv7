@@ -13,7 +13,6 @@ def ass_escape(s):
     return str(s).replace("\\", "/").replace("{", "(").replace("}", ")")
 
 
-OSD_CACHE = os.environ.get("TV7_OSD_CACHE", "/tmp/tv7-osd")  # logos converted for overlay-add
 FONT = "Inter"  # fontconfig falls back to DejaVu Sans if missing
 ACCENT, WHITE = "&H7468ED&", "&HFFFFFF&"  # TV7 coral (237, 104, 116), white (ASS colours are BGR)
 ACCENT_A, ACCENT_B = "&H7C70F0&", "&H5C4AE0&"  # the web UI's accent gradient #f0707c -> #e04a5c
@@ -128,8 +127,8 @@ def _convert_logo(url):
                 if ctype != "image/png":
                     raise ValueError("not a PNG")
             w, h, px = png.png_bytes_to_bgra(data)
-            os.makedirs(OSD_CACHE, exist_ok=True)
-            path = os.path.join(OSD_CACHE, hashlib.sha256(url.encode()).hexdigest() + ".bgra")
+            os.makedirs(config.OSD_CACHE, exist_ok=True)
+            path = os.path.join(config.OSD_CACHE, hashlib.sha256(url.encode()).hexdigest() + ".bgra")
             with open(path, "wb") as fh:
                 fh.write(px)
             _logo_bgra[url] = (path, w, h)

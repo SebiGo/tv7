@@ -46,9 +46,7 @@ if __name__ == "__main__":
     # control.py                    production (run.sh): starts and supervises mpv
     # control.py <socket> <port>    attach to an mpv someone else runs (tests, dev/run-web.sh)
     attach = len(sys.argv) > 2
-    mpvclient.SOCK, port = (
-        (sys.argv[1], int(sys.argv[2])) if attach else ("/tmp/mpv.sock", int(os.environ.get("TV7_API_PORT", "8765")))
-    )
+    mpvclient.SOCK, port = (sys.argv[1], int(sys.argv[2])) if attach else ("/tmp/mpv.sock", 8765)
     if not attach and "TV7_UI_PORT" not in os.environ:
         config.UI_PORT = 8099  # Home Assistant Ingress (web UI in the sidebar)
     signal.signal(signal.SIGTERM, mpvhost.stop_app)

@@ -106,7 +106,7 @@ def system_load():
     return out
 
 
-CPUFREQ_DIR = os.environ.get("TV7_CPUFREQ_DIR", "/sys/devices/system/cpu/cpu0/cpufreq")
+CPUFREQ_DIR = "/sys/devices/system/cpu/cpu0/cpufreq"
 
 
 def read_text(path):

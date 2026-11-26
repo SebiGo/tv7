@@ -5,15 +5,12 @@ import os
 import re
 import subprocess
 
-from tv7 import hwdec, mpvclient
-
-DRM_DIR = os.environ.get("TV7_DRM_DIR", "/sys/class/drm")  # overridable for tests
-MODETEST = os.environ.get("TV7_MODETEST", "modetest")
+from tv7 import config, hwdec, mpvclient
 
 
 def connectors():
     try:
-        return [os.path.join(DRM_DIR, d) for d in sorted(os.listdir(DRM_DIR)) if "-HDMI-A-" in d]
+        return [os.path.join(config.DRM_DIR, d) for d in sorted(os.listdir(config.DRM_DIR)) if "-HDMI-A-" in d]
     except FileNotFoundError:
         return []
 
@@ -147,18 +144,18 @@ def plane_fixes(text):
 
 def fix_planes():
     """Run before mpv starts (nobody holds the display then). Returns what was changed, for the log."""
-    r = subprocess.run([MODETEST, "-p"], capture_output=True, text=True, timeout=8)
+    r = subprocess.run([config.MODETEST, "-p"], capture_output=True, text=True, timeout=8)
     fixes = plane_fixes(r.stdout)
     done = []
     for f in fixes:
-        w = subprocess.run([MODETEST, "-w", f], capture_output=True, text=True, timeout=8)
+        w = subprocess.run([config.MODETEST, "-w", f], capture_output=True, text=True, timeout=8)
         done.append(f + ("" if w.returncode == 0 else f" (failed: {(w.stderr.strip().splitlines() or ['?'])[-1]})"))
     return done
 
 
 def drm_planes():
     try:
-        r = subprocess.run([MODETEST, "-p"], capture_output=True, text=True, timeout=8)
+        r = subprocess.run([config.MODETEST, "-p"], capture_output=True, text=True, timeout=8)
         return parse_planes(r.stdout)
     except Exception:
         return []
@@ -167,7 +164,7 @@ def drm_planes():
 def drm_modes():
     """Modes per HDMI connector with refresh rates (modetest); falls back to the resolutions in sysfs."""
     try:
-        r = subprocess.run([MODETEST, "-c"], capture_output=True, text=True, timeout=8)
+        r = subprocess.run([config.MODETEST, "-c"], capture_output=True, text=True, timeout=8)
         found = {k: v for k, v in parse_modetest(r.stdout).items() if "HDMI" in k and v}
         if found:
             return found
@@ -285,17 +282,17 @@ def mode_for_fps(fps, video_mode, port, modes=None):
 
 # vo: gpu|drm; pending: chosen without a connected display (plain DRM for now, chosen again once a display is there); hw: H.265 is
 # decoded in hardware; mode: the drm-mode mpv was started with; override: the output mode that follows the stream's frame rate.
-# Tests and the dev server attach to an mpv started by someone else and set the start values through TV7_VIDEO.
+# Tests and the dev server attach to an mpv started by someone else and set the start values (config.VIDEO_START).
 VIDEO = {
     "vo": None,
     "pending": "no",
-    "hw": os.environ.get("TV7_HW_AVAILABLE", "no"),
+    "hw": config.HW_AVAILABLE,
     "mode": "",
     "override": "",
     "extra": [],
     "msg": "",
 }
-VIDEO.update(dict(x.split("=", 1) for x in os.environ.get("TV7_VIDEO", "").split() if "=" in x))
+VIDEO.update(config.VIDEO_START)
 
 
 def video_state():

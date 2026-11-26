@@ -7,7 +7,7 @@ import zlib
 import pytest
 
 from fakes import APP_DIR, MODETEST_OUT, ROOTFS
-from tv7 import display, png
+from tv7 import config, display, png
 
 PLANE_HEAD = "Planes:\nid\tcrtc\tfb\tCRTC x,y\tx,y\tgamma size\tpossible crtcs\n"
 TYPE = "\t8 type:\n\t\tenums: Overlay=0 Primary=1 Cursor=2\n\t\tvalue: {}\n"
@@ -46,8 +46,8 @@ def modetest(world, monkeypatch):
     other = world.write_modetest("modetest2", MODETEST_OUT.replace("1920x1080 ", "1680x1050 "))
 
     def resolve(mode, port="", without_1080p=False):
-        monkeypatch.setattr(display, "MODETEST", other if without_1080p else f"{world.tmp}/modetest")
-        monkeypatch.setattr(display, "DRM_DIR", world.drm)
+        monkeypatch.setattr(config, "MODETEST", other if without_1080p else f"{world.tmp}/modetest")
+        monkeypatch.setattr(config, "DRM_DIR", world.drm)
         return display.resolve_mode(mode, port)
 
     return resolve
