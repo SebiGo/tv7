@@ -47,6 +47,19 @@ from http.server import ThreadingHTTPServer
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from tv7 import cec, config, init7, mpvclient, mpvhost, player, settings, tvdraw, tvinfo, tvmenu, web  # noqa: E402
 
+
+def wire():
+    """Lower layers report events through hooks; the modules that act on them sit above (docs/DEVELOPMENT.md, "Hooks").
+    Every hook is set here; tests/test_layers.py checks that none is left out."""
+    cec.handlers.update(
+        key=tvmenu.handle_key, standby=player.tv_standby, shown=player.tv_shown, playing=player.is_playing
+    )
+    player.handlers["resume"] = tvmenu.resume
+    for hooks, fn in ((mpvclient.on_idle, tvinfo.playback_ended), (tvdraw.on_logo_ready, tvmenu.logo_ready)):
+        if fn not in hooks:
+            hooks.append(fn)
+
+
 if __name__ == "__main__":
     # control.py                    production (run.sh): starts and supervises mpv
     # control.py <socket> <port>    attach to an mpv someone else runs (tests, dev/run-web.sh)
@@ -56,16 +69,7 @@ if __name__ == "__main__":
         config.UI_PORT = 8099  # Home Assistant Ingress (web UI in the sidebar)
     signal.signal(signal.SIGTERM, mpvhost.stop_app)
     signal.signal(signal.SIGINT, mpvhost.stop_app)
-    # Lower layers report events through these hooks; the modules that act on them sit above (see docs/DEVELOPMENT.md).
-    cec.handlers.update(
-        key=tvmenu.handle_key,
-        standby=player.tv_standby,
-        shown=player.tv_shown,
-        playing=lambda: bool(player.state.current["pk"]),
-    )
-    player.handlers["resume"] = tvmenu.resume
-    mpvclient.on_idle.append(tvinfo.playback_ended)
-    tvdraw.on_logo_ready.append(tvmenu.logo_ready)
+    wire()
     settings.init_settings()
     init7.channels(block=False)  # load the channel lists in the background, before the first key or page needs them
     mpvclient.mpv_log()  # collect mpv's log from the start (nerd mode, support text)

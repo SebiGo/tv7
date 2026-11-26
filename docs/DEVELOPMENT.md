@@ -94,14 +94,14 @@ that `control.py` fills at start.
 | 2 | `display`, `cec` | HDMI/DRM ports, modes, planes; the HDMI-CEC bus |
 | 1 | `init7`, `supervisor`, `mpvclient` | Init7 channel lists; Supervisor API; mpv IPC |
 | 0 | `config`, `png`, `hwdec` | paths, times, texts, log; PNG decoder; hardware decoder per device |
-Hooks (set in `control.py`):
+Hooks, all set in `control.wire()` (`tests/test_layers.py` checks that each one is set):
 
 | Hook | Set to | When |
 |---|---|---|
 | `cec.handlers["key"]` | `tvmenu.handle_key` | a key of the TV remote |
 | `cec.handlers["standby"]` | `player.tv_standby` | the TV switched to standby |
 | `cec.handlers["shown"]` | `player.tv_shown` | the TV switched to a source (the app's or another) |
-| `cec.handlers["playing"]` | reads `player.state` | the TV asks who the active source is |
+| `cec.handlers["playing"]` | `player.is_playing` | the TV asks who the active source is |
 | `player.handlers["resume"]` | `tvmenu.resume` | start again after the TV came back, with the channel banner |
 | `mpvclient.on_idle` | `tvinfo.playback_ended` | playback ended: remove the technical info at once |
 | `tvdraw.on_logo_ready` | `tvmenu.logo_ready` | a channel logo is converted: draw the menu or banner again |

@@ -49,3 +49,28 @@ def test_only_config_reads_the_environment():
             if "TV7_" in f.read() and not path.endswith("config.py"):
                 readers.append(os.path.basename(path))
     assert not readers, readers
+
+
+def test_control_sets_every_hook():
+    """control.wire() connects every hook of the lower layers; one that is left out would fail silently (no TV keys)."""
+    import importlib.util
+
+    from tv7 import cec, mpvclient, player, tvdraw, tvinfo, tvmenu
+
+    spec = importlib.util.spec_from_file_location("control", os.path.join(ROOTFS, "control.py"))
+    control = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(control)  # the __main__ part does not run
+    control.wire()
+    control.wire()  # twice: nothing is added twice
+    assert cec.handlers == {
+        "key": tvmenu.handle_key,
+        "standby": player.tv_standby,
+        "shown": player.tv_shown,
+        "playing": player.is_playing,
+    }
+    assert player.handlers == {"resume": tvmenu.resume}
+    assert mpvclient.on_idle == [tvinfo.playback_ended]
+    assert tvdraw.on_logo_ready == [tvmenu.logo_ready]
+    with open(os.path.join(ROOTFS, "control.py")) as f:
+        main = f.read().split('if __name__ == "__main__":', 1)[1]
+    assert "wire()" in main, "the app calls wire() at start"

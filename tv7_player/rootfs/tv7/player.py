@@ -41,6 +41,11 @@ state = Playback()
 handlers = {"resume": lambda ch, source: play(ch, source, wait=False)}
 
 
+def is_playing():
+    """Whether a channel plays (the TV asks over HDMI-CEC who the active source is)."""
+    return bool(state.current["pk"])
+
+
 def _clear_current():
     state.current = {"pk": None, "name": None, "source": None}
 
