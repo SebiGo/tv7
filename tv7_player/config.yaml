@@ -1,6 +1,6 @@
 ---
 name: "TV7 Player"
-version: "0.0.2-rc.1"
+version: "0.0.2"
 slug: tv7_player
 description: "Watch Init7 TV7 and the SRG Full HD channels on the TV connected to your Home Assistant device."
 url: "https://github.com/SebiGo/tv7"
