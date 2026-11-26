@@ -1,4 +1,8 @@
-"""The HTTP API (Home Assistant on this device) and the web UI (Home Assistant Ingress): endpoints, status, events."""
+"""The HTTP API (Home Assistant on this device) and the web UI (Home Assistant Ingress): endpoints, status, events.
+
+Every endpoint is a function in a routing table (GET, UI_POST, UI_STATIC). It gets the request handler and the query and
+returns (status code, JSON body), or None when it wrote the answer itself (logos, /events). Errors become answers in one
+place (_dispatch): KeyError 404, ValueError 400, PermissionError 403, anything else 502."""
 
 import json
 import os
@@ -49,204 +53,224 @@ def status_view():
     }
 
 
-class H(BaseHTTPRequestHandler):
-    def reply(self, code, obj):
-        body = json.dumps(obj, ensure_ascii=False).encode()
-        self.send_response(code)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+def _arg(q, name, choices=None):
+    """A query parameter; ValueError (400) when it is missing or not one of choices."""
+    if name not in q:
+        raise ValueError(f"{name} missing")
+    v = q[name][0]
+    if choices and v not in choices:
+        raise ValueError(f"{name}: {' or '.join(choices)}")
+    return v
 
-    def authorized(self, q):
-        return True  # the API listens on 127.0.0.1 only (see main)
+
+def get_channels(h, q):
+    keys = ("nr", "name", "pk", "hd", "multicast", "hls", "list", "logo")
+    return 200, [
+        dict(zip(keys, (c.get("ordernum"), c["name"], c["pk"], c.get("hd"), init7.multicast_url(c.get("src")) is not None,
+                        c.get("has_hls"), c.get("list", "tv7"), c.get("logo")), strict=True))
+        for c in init7.channels(force="refresh" in q)
+    ]  # fmt: skip
+
+
+def get_play(h, q):
+    channel, src = _arg(q, "channel"), q.get("source", ["auto"])[0]
+    if src not in ("auto", "multicast", "hls"):
+        raise ValueError("source: auto, multicast or hls")
+    player.touch()
+    res = player.play(init7.find_channel(channel), src)
+    return (200 if res["ok"] else 502), res
+
+
+def get_stop(h, q):
+    player.touch()
+    return 200, player.stop_playback()
+
+
+def get_key(h, q):
+    k = _arg(q, "k")
+    if k not in cec.KEYS:
+        raise ValueError("k: " + ", ".join(sorted(cec.KEYS)))
+    tvmenu.handle_key(k)
+    menu = tvmenu.menu
+    return 200, {"menu": menu["open"], "tab": tvmenu.TABS[menu["tab"]] if menu["open"] else None}
+
+
+def get_volume(h, q):
+    if "v" not in q and "d" not in q:
+        raise ValueError("v (0-130) or d (+/- change) missing")
+    player.touch()
+    vol = float(q["v"][0]) if "v" in q else (mpvclient.prop("volume") or 0) + float(q["d"][0])
+    return 200, mpvclient.mpv("set_property", "volume", max(0.0, min(130.0, vol)))
+
+
+def get_mute(h, q):
+    player.touch()
+    return 200, mpvclient.mpv("cycle", "mute")
+
+
+def get_track(h, q):
+    kind, tid = _arg(q, "type", ("audio", "sub")), _arg(q, "id")
+    if tid != "off" and not tid.isdigit():
+        raise ValueError("id: a track number or off")
+    player.touch()
+    return 200, mpvclient.mpv("set_property", "aid" if kind == "audio" else "sid", "no" if tid == "off" else int(tid))
+
+
+def get_osd(h, q):
+    if "on" in q:
+        on = _arg(q, "on", ("1", "0"))
+        return 200, tvinfo.set_osd(on == "1", q.get("lang", [""])[0][:2].lower() or None)
+    return 200, {"on": tvinfo.osd_state["on"]}
+
+
+def get_icon(h, q):
+    data, ctype = init7.logo_file(_arg(q, "u"))  # PermissionError (403) for URLs outside the Init7 logos
+    h.send_bytes(data, ctype, "public, max-age=604800")
+
+
+def get_events(h, q):
+    """Server-sent events: the status (as /status) at once, then whenever it changes, and at least every EVENTS_S (CPU load,
+    temperature and dropped frames change all the time). Ends when the client goes away."""
+    h.send_response(200)
+    h.send_header("Content-Type", "text/event-stream")
+    h.send_header("Cache-Control", "no-cache")
+    h.send_header("X-Accel-Buffering", "no")
+    h.end_headers()
+    seen, last = None, None
+    try:
+        while True:
+            seen = mpvclient.wait_change(seen, EVENTS_S)
+            data = json.dumps(status_view(), ensure_ascii=False)
+            h.wfile.write(f"data: {data}\n\n".encode() if data != last else b": still here\n\n")
+            h.wfile.flush()
+            last = data
+    except OSError:
+        return
+
+
+GET = {
+    "/health": lambda h, q: (200, {"ok": True}),
+    "/status": lambda h, q: (200, status_view()),
+    "/events": get_events,
+    "/channels": get_channels,
+    "/play": get_play,
+    "/stop": get_stop,
+    "/volume": get_volume,
+    "/mute": get_mute,
+    "/track": get_track,
+    "/key": get_key,
+    "/osd": get_osd,
+    "/icon": get_icon,
+    "/favorites": lambda h, q: (200, {"favorites": init7.load_favorites()}),
+    "/settings": lambda h, q: (200, settings.settings_view(q.get("lang", ["en"])[0][:2].lower())),
+    "/environment": lambda h, q: (200, system.environment()),
+    "/nerd": lambda h, q: (200, system.nerd()),
+    "/support": lambda h, q: (200, {"text": support.support_text()}),
+}
+
+
+def post_settings(h, body):
+    if not isinstance(body, dict) or not isinstance(body.get("values"), dict):
+        raise ValueError('body: {"values": {...}}')
+    return 200, settings.save_settings(body["values"])
+
+
+def post_favorites(h, body):
+    if not isinstance(body, dict):
+        raise ValueError('body: {"favorites": [...]}')
+    return 200, {"favorites": init7.save_favorites(body.get("favorites"))}
+
+
+def post_restart(h, body):
+    if not supervisor.available():
+        return 502, {"error": "restart needs the Supervisor API (hassio_api)"}
+    h.reply(200, {"ok": True})
+    supervisor.restart_app()
+
+
+UI_POST = {"/settings": post_settings, "/favorites": post_favorites, "/restart": post_restart}
+# the page (its texts come from i18n/<lang>.json) and the logo
+UI_STATIC = {
+    "/": ("UI_FILE", "text/html; charset=utf-8"),
+    "/index.html": ("UI_FILE", "text/html; charset=utf-8"),
+    "/logo.png": ("UI_LOGO", "image/png"),
+}
+
+
+class H(BaseHTTPRequestHandler):
+    """The API: listens on 127.0.0.1 only (control.py), so only Home Assistant on this device reaches it."""
+
+    def reply(self, code, obj):
+        self.send_bytes(json.dumps(obj, ensure_ascii=False).encode(), "application/json; charset=utf-8", code=code)
+
+    def send_bytes(self, data, ctype, cache=None, code=200):
+        self.send_response(code)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(data)))
+        if cache:
+            self.send_header("Cache-Control", cache)
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _dispatch(self, routes, arg):
+        fn = routes.get(urllib.parse.urlparse(self.path).path)
+        if not fn:
+            return self.reply(404, {"error": "unknown endpoint"})
+        try:
+            res = fn(self, arg)
+        except KeyError as e:
+            res = 404, {"error": str(e).strip("\"'")}
+        except ValueError as e:
+            res = 400, {"error": str(e)}
+        except PermissionError as e:
+            res = 403, {"error": str(e)}
+        except Exception as e:
+            res = 502, {"error": str(e)}
+        if res is not None:
+            self.reply(*res)
 
     def do_GET(self):
-        u = urllib.parse.urlparse(self.path)
-        q = urllib.parse.parse_qs(u.query)
-        if u.path == "/health":
-            return self.reply(200, {"ok": True})
-        if not self.authorized(q):
-            return self.reply(401, {"error": "Token missing or wrong"})
-        try:
-            if u.path == "/channels":
-                return self.reply(
-                    200,
-                    [
-                        {
-                            "nr": c.get("ordernum"),
-                            "name": c["name"],
-                            "pk": c["pk"],
-                            "hd": c.get("hd"),
-                            "multicast": init7.multicast_url(c.get("src")) is not None,
-                            "hls": c.get("has_hls"),
-                            "list": c.get("list", "tv7"),
-                            "logo": c.get("logo"),
-                        }
-                        for c in init7.channels(force="refresh" in q)
-                    ],
-                )
-            if u.path == "/play" and "channel" in q:
-                src = q.get("source", ["auto"])[0]
-                if src not in ("auto", "multicast", "hls"):
-                    return self.reply(400, {"error": "source: auto, multicast or hls"})
-                player.touch()
-                res = player.play(init7.find_channel(q["channel"][0]), src)
-                return self.reply(200 if res["ok"] else 502, res)
-            if u.path == "/stop":
-                player.touch()
-                return self.reply(200, player.stop_playback())
-            if u.path == "/key" and "k" in q:
-                if q["k"][0] not in cec.KEYS:
-                    return self.reply(400, {"error": "k: " + ", ".join(sorted(cec.KEYS))})
-                tvmenu.handle_key(q["k"][0])
-                return self.reply(
-                    200,
-                    {
-                        "menu": tvmenu.menu["open"],
-                        "tab": tvmenu.TABS[tvmenu.menu["tab"]] if tvmenu.menu["open"] else None,
-                    },
-                )
-            if u.path == "/volume" and ("v" in q or "d" in q):
-                player.touch()
-                vol = float(q["v"][0]) if "v" in q else (mpvclient.prop("volume") or 0) + float(q["d"][0])
-                return self.reply(200, mpvclient.mpv("set_property", "volume", max(0.0, min(130.0, vol))))
-            if u.path == "/mute":
-                player.touch()
-                return self.reply(200, mpvclient.mpv("cycle", "mute"))
-            if u.path == "/settings":
-                return self.reply(200, settings.settings_view(q.get("lang", ["en"])[0][:2].lower()))
-            if u.path == "/favorites":
-                return self.reply(200, {"favorites": init7.load_favorites()})
-            if u.path == "/icon" and "u" in q:
-                try:
-                    data, ctype = init7.logo_file(q["u"][0])
-                except PermissionError as e:
-                    return self.reply(403, {"error": str(e)})
-                self.send_response(200)
-                self.send_header("Content-Type", ctype)
-                self.send_header("Content-Length", str(len(data)))
-                self.send_header("Cache-Control", "public, max-age=604800")
-                self.end_headers()
-                return self.wfile.write(data)
-            if u.path == "/track" and "type" in q and "id" in q:
-                kind, tid = q["type"][0], q["id"][0]
-                if kind not in ("audio", "sub"):
-                    return self.reply(400, {"error": "type: audio or sub"})
-                if tid != "off" and not tid.isdigit():
-                    return self.reply(400, {"error": "id: a track number or off"})
-                player.touch()
-                return self.reply(
-                    200,
-                    mpvclient.mpv(
-                        "set_property", "aid" if kind == "audio" else "sid", "no" if tid == "off" else int(tid)
-                    ),
-                )
-            if u.path == "/environment":
-                return self.reply(200, system.environment())
-            if u.path == "/nerd":
-                return self.reply(200, system.nerd())
-            if u.path == "/osd":
-                if "on" in q:
-                    if q["on"][0] not in ("0", "1"):
-                        return self.reply(400, {"error": "on: 1 or 0"})
-                    return self.reply(
-                        200, tvinfo.set_osd(q["on"][0] == "1", q.get("lang", [""])[0][:2].lower() or None)
-                    )
-                return self.reply(200, {"on": tvinfo.osd_state["on"]})
-            if u.path == "/support":
-                return self.reply(200, {"text": support.support_text()})
-            if u.path == "/events":
-                return self.events()
-            if u.path == "/status":
-                return self.reply(200, status_view())
-            self.reply(404, {"error": "unknown endpoint"})
-        except KeyError as e:
-            self.reply(404, {"error": str(e).strip("\"'")})
-        except ValueError as e:
-            self.reply(400, {"error": str(e)})
-        except Exception as e:
-            self.reply(502, {"error": str(e)})
-
-    def events(self):
-        """Server-sent events: the status (as /status) at once, then whenever it changes, and at least every EVENTS_S (CPU load,
-        temperature and dropped frames change all the time). Ends when the client goes away."""
-        self.send_response(200)
-        self.send_header("Content-Type", "text/event-stream")
-        self.send_header("Cache-Control", "no-cache")
-        self.send_header("X-Accel-Buffering", "no")
-        self.end_headers()
-        seen, last = None, None
-        try:
-            while True:
-                seen = mpvclient.wait_change(seen, EVENTS_S)
-                data = json.dumps(status_view(), ensure_ascii=False)
-                self.wfile.write(f"data: {data}\n\n".encode() if data != last else b": still here\n\n")
-                self.wfile.flush()
-                last = data
-        except OSError:
-            return
+        self._dispatch(GET, urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query))
 
     def log_message(self, *a):
         pass
 
 
 class UiH(H):
-    """Handler for the Ingress web UI: same endpoints, plus the page itself; only the Supervisor may connect."""
+    """The Ingress web UI: the same endpoints, plus the page and the POST endpoints; only the Supervisor may connect, so
+    Home Assistant has authenticated the user."""
 
-    def authorized(self, q):
-        return config.ui_client_ok(self.client_address[0])
+    def allowed(self):
+        if not config.ui_client_ok(self.client_address[0]):
+            self.reply(403, {"error": "forbidden"})
+            return False
+        return True
+
+    def do_GET(self):
+        if not self.allowed():
+            return
+        static = UI_STATIC.get(urllib.parse.urlparse(self.path).path)
+        if not static:
+            return super().do_GET()
+        path = getattr(config, static[0])
+        try:
+            with open(path, "rb") as f:
+                data = f.read()
+        except OSError:
+            return self.reply(404, {"error": "file missing"})
+        if path == config.UI_FILE:
+            data = data.replace(b"/*I18N*/{}", config.UI_TEXTS)
+        self.send_bytes(data, static[1], "no-cache")
 
     def do_POST(self):
-        if not config.ui_client_ok(self.client_address[0]):
-            return self.reply(403, {"error": "forbidden"})
+        if not self.allowed():
+            return
         # A custom header makes cross-site form posts impossible (browsers would need a CORS preflight, which is never granted).
         if self.headers.get("X-TV7-UI") != "1":
             return self.reply(403, {"error": "missing X-TV7-UI header"})
-        path = urllib.parse.urlparse(self.path).path
         try:
             n = int(self.headers.get("Content-Length", "0"))
             body = json.loads(self.rfile.read(n) or b"{}") if 0 <= n <= 65536 else None
-            if path == "/settings":
-                if not isinstance(body, dict) or not isinstance(body.get("values"), dict):
-                    return self.reply(400, {"error": 'body: {"values": {...}}'})
-                return self.reply(200, settings.save_settings(body["values"]))
-            if path == "/favorites":
-                if not isinstance(body, dict):
-                    return self.reply(400, {"error": 'body: {"favorites": [...]}'})
-                return self.reply(200, {"favorites": init7.save_favorites(body.get("favorites"))})
-            if path == "/restart":
-                if not supervisor.available():
-                    return self.reply(502, {"error": "restart needs the Supervisor API (hassio_api)"})
-                self.reply(200, {"ok": True})
-                supervisor.restart_app()
-                return
-            return self.reply(404, {"error": "unknown endpoint"})
         except ValueError as e:
             return self.reply(400, {"error": str(e)})
-        except Exception as e:
-            return self.reply(502, {"error": str(e)})
-
-    def do_GET(self):
-        if not config.ui_client_ok(self.client_address[0]):
-            return self.reply(403, {"error": "forbidden"})
-        path = urllib.parse.urlparse(self.path).path
-        static = {
-            "/": (config.UI_FILE, "text/html; charset=utf-8"),
-            "/index.html": (config.UI_FILE, "text/html; charset=utf-8"),
-            "/logo.png": (config.UI_LOGO, "image/png"),
-        }
-        if path in static:
-            try:
-                body = open(static[path][0], "rb").read()
-            except OSError:
-                return self.reply(404, {"error": "file missing"})
-            if static[path][0] == config.UI_FILE:  # the page's texts come from i18n/<lang>.json
-                body = body.replace(b"/*I18N*/{}", config.UI_TEXTS)
-            self.send_response(200)
-            self.send_header("Content-Type", static[path][1])
-            self.send_header("Content-Length", str(len(body)))
-            self.send_header("Cache-Control", "no-cache")
-            self.end_headers()
-            return self.wfile.write(body)
-        super().do_GET()
+        self._dispatch(UI_POST, body)

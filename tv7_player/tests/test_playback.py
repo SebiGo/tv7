@@ -155,3 +155,11 @@ def test_status_while_playing(app, world):
     assert "cores" in d["system"] and len(d["audio_tracks"]) == 2 and d["sub_tracks"][0]["lang"] == "deu", d
     assert d["pending_restart"] == []
     assert d["stream"] == {"w": 1280, "h": 720, "fps": 50.0} and d["output"] == {"w": 1920, "h": 1080, "hz": 50.0}
+
+
+def test_missing_parameters_and_unknown_endpoints(app):
+    for path in ("/play", "/key", "/track?type=audio", "/icon", "/volume"):
+        c, d = app.get(path)
+        assert c == 400 and "missing" in d["error"], (path, d)
+    assert app.get("/nothing")[0] == 404
+    assert app.get("/track?type=video&id=1")[1]["error"] == "type: audio or sub"
