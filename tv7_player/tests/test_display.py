@@ -1,4 +1,4 @@
-"""Parsers and helpers of tv7/display.py, called directly: DRM planes, output mode resolution, the PNG decoder."""
+"""Called directly: the parsers of tv7/display.py (DRM planes, output mode resolution) and the PNG decoder (tv7/png.py)."""
 
 import os
 import struct
@@ -7,7 +7,7 @@ import zlib
 import pytest
 
 from fakes import APP_DIR, MODETEST_OUT, ROOTFS
-from tv7 import display
+from tv7 import display, png
 
 PLANE_HEAD = "Planes:\nid\tcrtc\tfb\tCRTC x,y\tx,y\tgamma size\tpossible crtcs\n"
 TYPE = "\t8 type:\n\t\tenums: Overlay=0 Primary=1 Cursor=2\n\t\tvalue: {}\n"
@@ -71,7 +71,7 @@ def test_resolve_auto(modetest):
 
 def test_idle_logo_bgra():
     """The logo PNG becomes premultiplied BGRA for mpv's overlay-add."""
-    w, h, raw = display.png_to_bgra(os.path.join(ROOTFS, "ui-logo.png"))
+    w, h, raw = png.png_to_bgra(os.path.join(ROOTFS, "ui-logo.png"))
     px = [raw[i : i + 4] for i in range(0, len(raw), 4)]
     assert (w, h) == (360, 188) and len(raw) == 360 * 188 * 4
     assert px[0] == b"\0\0\0\0", "transparent corner"
@@ -81,7 +81,7 @@ def test_idle_logo_bgra():
 
 def test_png_decoder_refuses_bad_input():
     with pytest.raises(ValueError, match="not a PNG"):
-        display.png_to_bgra(os.path.join(APP_DIR, "config.yaml"))  # the idle screen then stays black
+        png.png_to_bgra(os.path.join(APP_DIR, "config.yaml"))  # the idle screen then stays black
 
     def chunk(k, d):
         return struct.pack(">I", len(d)) + k + d + struct.pack(">I", zlib.crc32(k + d))
@@ -89,4 +89,4 @@ def test_png_decoder_refuses_bad_input():
     huge = (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 20000, 20000, 8, 6, 0, 0, 0))
             + chunk(b"IDAT", zlib.compress(bytes(1000000))) + chunk(b"IEND", b""))  # fmt: skip
     with pytest.raises(ValueError, match="too large"):
-        display.png_bytes_to_bgra(huge)  # no memory/CPU exhaustion through a logo
+        png.png_bytes_to_bgra(huge)  # no memory/CPU exhaustion through a logo

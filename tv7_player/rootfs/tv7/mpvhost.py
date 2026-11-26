@@ -5,7 +5,7 @@ import os
 import subprocess
 import time
 
-from tv7 import config, display, mpvclient, settings
+from tv7 import config, display, hwdec, mpvclient, png, settings
 
 # control.py starts mpv itself (run.sh only starts control.py): it chooses the video output, hardware decoding, output mode and
 # audio device, starts mpv and starts it again whenever it ends (a crash must not leave the player dead; a channel start asks
@@ -60,7 +60,7 @@ def setup_video(opts, drm_args):
     except Exception:
         help_text = ""
     render = sorted(glob.glob("/dev/dri/renderD*"))
-    extra, hw, msg = display.pick_hwdec(
+    extra, hw, msg = hwdec.pick_hwdec(
         vo,
         help_text,
         display._read_all("/sys/class/video4linux/*/name"),
@@ -133,7 +133,7 @@ def mpv_base_args(opts, drm_args, connector):
     if opts.get("audio_channels") == "stereo":
         args.append("--audio-channels=stereo")
     try:
-        w, h, px = display.png_to_bgra(config.UI_LOGO)  # idle screen: the TV7 logo while nothing plays
+        w, h, px = png.png_to_bgra(config.UI_LOGO)  # idle screen: the TV7 logo while nothing plays
         with open(IDLE_LOGO_RAW, "wb") as f:
             f.write(px)
         args += [

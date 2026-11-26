@@ -8,13 +8,14 @@ import os
 from fakes import ROOTFS
 
 LAYERS = [
-    {"config"},  # paths, version, texts, log
+    {"config", "png", "hwdec"},  # paths, version, texts, log; PNG decoder; decoder choice per device
     {"init7", "supervisor", "mpvclient"},  # outside services: Init7, the Supervisor, mpv
     {"display", "cec"},  # devices: HDMI/DRM, HDMI-CEC
     {"settings"},  # options
     {"player", "mpvhost"},  # what plays, running mpv
-    {"system"},  # live data for the views
-    {"tvosd", "support"},  # TV overlays, support text
+    {"system", "tvdraw"},  # live data for the views; drawing on the TV
+    {"tvinfo"},  # technical info on the TV
+    {"tvmenu", "support"},  # TV menu, banner and remote keys; support text
     {"web"},  # HTTP API and web UI
 ]
 LAYER = {m: i for i, layer in enumerate(LAYERS) for m in layer}

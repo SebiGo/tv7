@@ -40,7 +40,7 @@ from http.server import ThreadingHTTPServer
 
 # the package tv7 next to this file (also with python -I)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from tv7 import cec, config, mpvclient, mpvhost, player, settings, tvosd, web  # noqa: E402
+from tv7 import cec, config, mpvclient, mpvhost, player, settings, tvdraw, tvinfo, tvmenu, web  # noqa: E402
 
 if __name__ == "__main__":
     # control.py                    production (run.sh): starts and supervises mpv
@@ -55,18 +55,19 @@ if __name__ == "__main__":
     signal.signal(signal.SIGINT, mpvhost.stop_app)
     # Lower layers report events through these hooks; the modules that act on them sit above (see docs/DEVELOPMENT.md).
     cec.handlers.update(
-        key=tvosd.handle_key,
+        key=tvmenu.handle_key,
         standby=player.tv_standby,
         shown=player.tv_shown,
         playing=lambda: bool(player.state.current["pk"]),
     )
-    player.handlers["resume"] = tvosd.resume
-    mpvclient.on_idle.append(tvosd.playback_ended)
+    player.handlers["resume"] = tvmenu.resume
+    mpvclient.on_idle.append(tvinfo.playback_ended)
+    tvdraw.on_logo_ready.append(tvmenu.logo_ready)
     settings.init_settings()
     mpvclient.mpv_log()  # collect mpv's log from the start (nerd mode, support text)
     threading.Thread(target=player.watcher, daemon=True).start()
-    threading.Thread(target=tvosd.osd_loop, daemon=True).start()
-    threading.Thread(target=tvosd.ha_language_loop, daemon=True).start()
+    threading.Thread(target=tvmenu.osd_loop, daemon=True).start()
+    threading.Thread(target=tvdraw.ha_language_loop, daemon=True).start()
     threading.Thread(
         target=lambda: cec.cec_setup(settings.current_values().get("cec", "auto") != "off"), daemon=True
     ).start()

@@ -47,7 +47,7 @@ One process (`control.py`) controls one mpv, which draws straight onto the HDMI 
 │   │ │ │  └─▶ mpvclient ── JSON IPC (/tmp/mpv.sock) ──▶ mpv               │
 │   │ │ │                                                                  │
 │   │ │ └─── watcher: HDMI display gone, idle_stop, TV switched away       │
-│   │ └───── tvosd: TV menu, channel banner, technical info                │
+│   │ └───── tvmenu: TV menu, channel banner (tvinfo: technical info)      │
 │   └─────── cec ◀── cec-ctl ◀── TV remote (HDMI-CEC)                      │
 │                                                                          │
 │ mpvhost    starts mpv, starts it again when it exits                     │
@@ -75,24 +75,26 @@ The modules of `tv7/` sit in layers. A module imports only modules of the layers
 that. Where a lower module has to tell an upper one something (a key from the TV remote, playback ended), it calls a hook
 that `control.py` fills at start.
 ```
- 7  web                    HTTP API and web UI: endpoints, /events
- 6  tvosd   support        TV menu, banner, technical info  |  support text
- 5  system                 live data for the views: load, audio devices, nerd data
+ 8  web                    HTTP API and web UI: endpoints, /events
+ 7  tvmenu  support        TV menu, channel banner, remote keys  |  support text
+ 6  tvinfo                 technical info on the TV picture
+ 5  system  tvdraw         live data for the views  |  drawing on the TV: shapes, texts, language, logos
  4  player  mpvhost        what plays and why it stopped  |  starting and supervising mpv
  3  settings               options: read, validate, save, apply live
- 2  display  cec           HDMI/DRM: ports, modes, planes, decoder  |  HDMI-CEC bus
+ 2  display  cec           HDMI/DRM: ports, modes, planes  |  HDMI-CEC bus
  1  init7  supervisor  mpvclient
                            Init7 channel lists  |  Supervisor API  |  mpv IPC
- 0  config                 paths, version, texts, log
+ 0  config  png  hwdec     paths, version, texts, log  |  PNG decoder  |  decoder choice per device
 ```
 Hooks (set in `control.py`):
 ```
- cec.handlers["key"]       ──▶ tvosd.handle_key        a key of the TV remote
+ cec.handlers["key"]       ──▶ tvmenu.handle_key       a key of the TV remote
  cec.handlers["standby"]   ──▶ player.tv_standby       the TV switched to standby
  cec.handlers["shown"]     ──▶ player.tv_shown         the TV switched to a source (the app's or another)
  cec.handlers["playing"]   ──▶ player.state            whether a channel plays (the TV asks who the active source is)
- player.handlers["resume"] ──▶ tvosd.resume            start again after the TV came back, with the channel banner
- mpvclient.on_idle         ──▶ tvosd.playback_ended    playback ended: remove the technical info at once
+ player.handlers["resume"] ──▶ tvmenu.resume           start again after the TV came back, with the channel banner
+ mpvclient.on_idle         ──▶ tvinfo.playback_ended   playback ended: remove the technical info at once
+ tvdraw.on_logo_ready      ──▶ tvmenu.logo_ready       a channel logo is converted: draw the menu or banner again
 ```
 **Playback state:** `player.state` holds what plays, the last start (support text), the last channel (play key) and the
 notes of automatic stops. Only `player` changes it; everything else reads it. Every change of what plays goes through
@@ -100,7 +102,7 @@ notes of automatic stops. Only `player` changes it; everything else reads it. Ev
 a start someone asked for; it clears the notes of automatic stops and keeps the result for the support text.
 
 ## Layout
-- `tv7_player/rootfs/control.py` the start (production: starts and supervises mpv; with `<socket> <port>` it attaches to an mpv started by someone else: tests, `dev/run-web.sh`). The code is in the package `tv7_player/rootfs/tv7/` (layers above): `config` (version, paths, texts), `init7` (channel lists, Init7-only stream addresses, logos, favorites), `supervisor` (Supervisor API: options, restart, log, versions, Core config), `mpvclient` (mpv IPC, log, change notifications), `display` (HDMI, modes, planes, decoder choice, PNG decoder), `cec` (HDMI-CEC bus), `settings` (options), `player` (channel start/stop on one worker thread, output mode that follows the stream, automatic stops and resumes), `mpvhost` (starting and supervising mpv, audio device), `system` (load, audio devices, nerd data), `tvosd` (technical info, menu, banner, remote keys), `support` (support text), `web` (API, web UI, `/events`).
+- `tv7_player/rootfs/control.py` the start (production: starts and supervises mpv; with `<socket> <port>` it attaches to an mpv started by someone else: tests, `dev/run-web.sh`). The code is in the package `tv7_player/rootfs/tv7/` (layers above): `config` (version, paths, texts), `init7` (channel lists, Init7-only stream addresses, logos, favorites), `supervisor` (Supervisor API: options, restart, log, versions, Core config), `mpvclient` (mpv IPC, log, change notifications), `png` (PNG decoder for the logos), `hwdec` (hardware decoder per device), `display` (HDMI, modes, planes, deinterlacing), `cec` (HDMI-CEC bus), `settings` (options), `player` (channel start/stop on one worker thread, output mode that follows the stream, automatic stops and resumes), `mpvhost` (starting and supervising mpv, audio device), `system` (load, audio devices, nerd data), `tvdraw` (drawing on the TV, language of the TV texts, logo cache), `tvinfo` (technical info on the TV), `tvmenu` (menu, banner, remote keys), `support` (support text), `web` (API, web UI, `/events`).
 - `tv7_player/rootfs/ui.html` the page; `tv7_player/rootfs/i18n/<lang>.json` its texts ("ui") and those of the TV menu, banner and technical info ("tv"), de/en/fr/it; `tv7_player/translations/<lang>.yaml` the option names and descriptions (Home Assistant's format, also used by the web UI).
 - `tv7_player/rootfs/run.sh` only starts `control.py`.
 - `tv7_player/` is the Home Assistant app (`config.yaml`, `Dockerfile`, DOCS, translations); `repository.yaml` makes the folder an add-on repository.
@@ -111,7 +113,7 @@ a start someone asked for; it clears the notes of automatic stops and keeps the 
 - **HTTP servers:** the API (127.0.0.1) and the web UI (Ingress), one thread per request; `/events` keeps its thread while the page is open.
 - **Player worker** (`player.player`): the only thread that starts, stops or restarts what plays. Web UI, TV menu, CEC and the watcher hand their actions to it, so they never overlap.
 - **Watcher** (`player.watcher`): every 2 s checks the HDMI display, inactivity (`idle_stop`) and whether the TV switched away (CEC).
-- **TV overlay** (`tvosd.osd_loop`): refreshes the technical info and closes the menu and banner after their time; `tvosd.ha_language_loop` follows Home Assistant's language for the TV texts.
+- **TV overlay** (`tvmenu.osd_loop`): refreshes the technical info and closes the menu and banner after their time; `tvdraw.ha_language_loop` follows Home Assistant's language for the TV texts.
 - **CEC** (`cec.cec_setup`): registers the app on the HDMI-CEC bus, then reads the TV's messages (`cec-ctl -W`) and passes them to `cec.handlers`.
 - **mpv log reader** (`mpvclient.mpv_log`): collects mpv's log for nerd mode and the support text.
 - **mpv supervision** (`mpvhost.run_player`, the main thread): starts mpv and starts it again when it exits.

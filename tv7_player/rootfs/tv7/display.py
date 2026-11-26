@@ -1,12 +1,11 @@
-"""The display: HDMI connectors, output modes, planes, deinterlacing, hardware decoding per device, the output mode that follows the stream, the video output state, the PNG decoder for logos."""
+"""The display: HDMI connectors, output modes, planes, deinterlacing and the video output state."""
 
 import glob
 import os
 import re
 import subprocess
-import zlib
 
-from tv7 import mpvclient
+from tv7 import hwdec, mpvclient
 
 DRM_DIR = os.environ.get("TV7_DRM_DIR", "/sys/class/drm")  # overridable for tests
 MODETEST = os.environ.get("TV7_MODETEST", "modetest")
@@ -33,18 +32,11 @@ def hdmi_ok():
     return "connected" in hdmi_status().values()
 
 
-def deinterlace_possible(hwdec):
-    """Software frames (no, *-copy) and VAAPI frames (mpv deinterlaces them with vavpp) can be deinterlaced. Frames that go straight
-    to a display plane (drm on the Raspberry Pi) cannot: a deinterlace filter would turn hardware decoding off."""
-    hwdec = hwdec or "no"
-    return hwdec == "no" or hwdec.endswith("-copy") or hwdec.startswith("vaapi")
-
-
 def update_deinterlace():
     """Deinterlace where the current decoder allows it (see deinterlace_possible). "auto" deinterlaces only frames that are
     interlaced (1080i channels), not the progressive ones (720p50, 1080p); mpv without "auto" gets "yes"."""
     try:
-        if not deinterlace_possible(mpvclient.prop("hwdec-current")):
+        if not hwdec.deinterlace_possible(mpvclient.prop("hwdec-current")):
             mpvclient.mpv("set_property", "deinterlace", False)
         elif mpvclient.mpv("set_property", "deinterlace", "auto").get("error") != "success":
             mpvclient.mpv("set_property", "deinterlace", True)
@@ -225,82 +217,6 @@ def auto_size(lst):
     return (pref["w"], pref["h"]) if pref else None
 
 
-def png_to_bgra(path):
-    """Decode a PNG file into premultiplied BGRA, the raw format of mpv's overlay-add. Returns (width, height, bytes)."""
-    return png_bytes_to_bgra(open(path, "rb").read())
-
-
-PNG_MAX_PIXELS = 2_000_000  # logos and the idle logo are far smaller
-
-
-def png_bytes_to_bgra(data):
-    """Decode an 8-bit PNG (grey, RGB, palette, each with or without alpha; not interlaced) into premultiplied BGRA.
-    Standard library only: the image has no imaging library."""
-    if data[:8] != b"\x89PNG\r\n\x1a\n":
-        raise ValueError("not a PNG file")
-    pos, idat, w, h, ctype, palette, trns = 8, b"", 0, 0, 0, b"", b""
-    while pos < len(data):
-        n = int.from_bytes(data[pos : pos + 4], "big")
-        kind, body = data[pos + 4 : pos + 8], data[pos + 8 : pos + 8 + n]
-        pos += 12 + n
-        if kind == b"IHDR":
-            w, h = int.from_bytes(body[0:4], "big"), int.from_bytes(body[4:8], "big")
-            depth, ctype, interlace = body[8], body[9], body[12]
-            if depth != 8 or ctype not in (0, 2, 3, 4, 6) or interlace:
-                raise ValueError("only 8-bit PNGs without interlacing are supported")
-            if not 0 < w * h <= PNG_MAX_PIXELS:
-                raise ValueError(f"image too large ({w}x{h})")
-        elif kind == b"PLTE":
-            palette = body
-        elif kind == b"tRNS":
-            trns = body
-        elif kind == b"IDAT":
-            idat += body
-        elif kind == b"IEND":
-            break
-    bpp = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}[ctype]
-    stride = w * bpp
-    need = h * (stride + 1)
-    raw = zlib.decompressobj().decompress(idat, need)  # never more than the image needs (no decompression bomb)
-    if len(raw) < need:
-        raise ValueError("PNG data incomplete")
-    prev, out = bytearray(stride), bytearray()
-    for y in range(h):
-        f, line = raw[y * (stride + 1)], bytearray(raw[y * (stride + 1) + 1 : (y + 1) * (stride + 1)])
-        for i in range(stride):
-            a = line[i - bpp] if i >= bpp else 0
-            b = prev[i]
-            c = prev[i - bpp] if i >= bpp else 0
-            if f == 1:
-                line[i] = (line[i] + a) & 255
-            elif f == 2:
-                line[i] = (line[i] + b) & 255
-            elif f == 3:
-                line[i] = (line[i] + (a + b) // 2) & 255
-            elif f == 4:
-                pa, pb, pc = abs(b - c), abs(a - c), abs(a + b - 2 * c)
-                line[i] = (line[i] + (a if pa <= pb and pa <= pc else b if pb <= pc else c)) & 255
-        for x in range(w):
-            q = x * bpp
-            if ctype == 6:
-                r_, g, b_, al = line[q], line[q + 1], line[q + 2], line[q + 3]
-            elif ctype == 2:
-                r_, g, b_, al = line[q], line[q + 1], line[q + 2], 255
-            elif ctype == 3:
-                k = line[q]
-                r_, g, b_ = palette[3 * k : 3 * k + 3] or b"\0\0\0"
-                al = trns[k] if k < len(trns) else 255
-            elif ctype == 4:
-                r_ = g = b_ = line[q]
-                al = line[q + 1]
-            else:
-                r_ = g = b_ = line[q]
-                al = 255
-            out += bytes((b_ * al // 255, g * al // 255, r_ * al // 255, al))
-        prev = line
-    return w, h, bytes(out)
-
-
 def resolve_mode(video_mode, port, modes=None):
     """The mode mpv starts with (--drm-mode) plus a note. 'preferred' / 'highest' pass through; a size is resolved to the mode
     INDEX of the connector (a "1920x1080@50" spec could match an interlaced mode first), at the start rate (start_rate); the
@@ -393,56 +309,6 @@ def hw_available():
 def set_mode_override(mode):
     """The output mode mpv gets at its next start (follows the stream's frame rate); "" for none."""
     VIDEO["override"] = str(mode)
-
-
-def pick_hwdec(vo, hwdec_help, v4l2_names, arch, render_node):
-    """mpv arguments for the video output and the hardware decoding of this device. Returns (arguments, H.265 in hardware, log text).
-    - Raspberry Pi 5 and 4, H.265: rpi-hevc-dec (V4L2 stateless, --hwdec=drm). These frames go straight to the display's bottom
-      ("primary") plane; the GPU draws everything else (software-decoded channels, menu, technical info, idle logo) on the overlay
-      plane above, which fix_planes makes opaque before mpv starts. Measured on the Pi 5: about 0.15 of 4 cores instead of 3.
-    - Raspberry Pi 4, H.264: bcm2835-codec (V4L2 stateful, --hwdec=v4l2m2m-copy); "copy" hands the frames back to normal memory, so
-      software deinterlacing keeps working. Not tested on a Pi 4.
-    - x86 with Intel or AMD graphics: VAAPI for H.264 and H.265, deinterlaced in hardware (vavpp); without the GPU output the frames
-      are copied (vaapi-copy). Not tested on a device."""
-
-    def has(name):
-        return re.search(rf"^ *{re.escape(name)}( |$)", hwdec_help or "", re.M) is not None
-
-    hevc = "rpi-hevc-dec" in (v4l2_names or "") and has("drm")
-    h264 = "bcm2835-codec-decode" in (v4l2_names or "") and has("v4l2m2m-copy")
-    vaapi = arch == "x86_64" and bool(render_node) and has("vaapi")
-    args = ["--vo=gpu", "--gpu-context=drm"] if vo == "gpu" else ["--vo=drm"]
-    if vaapi:
-        return (
-            args + ["--hwdec=vaapi" if vo == "gpu" else "--hwdec=vaapi-copy"],
-            False,
-            f"VAAPI ({render_node}), all codecs the GPU supports",
-        )
-    hw, codecs, msg = [], [], []
-    if hevc and vo == "gpu":
-        args += [
-            "--gpu-hwdec-interop=drmprime-overlay",
-            "--drm-draw-plane=overlay",
-            "--drm-drmprime-video-plane=primary",
-        ]
-        hw, codecs, msg = ["drm"], ["hevc"], ["H.265 on the Raspberry Pi HEVC decoder"]
-    if h264:
-        hw, codecs, msg = (
-            hw + ["v4l2m2m-copy"],
-            codecs + ["h264"],
-            msg + ["H.264 on the Raspberry Pi 4 decoder (v4l2m2m-copy, not tested)"],
-        )
-    if hw:
-        return (
-            args + [f"--hwdec={','.join(hw)}", f"--hwdec-codecs={','.join(codecs)}"],
-            "drm" in hw,
-            "; ".join(msg) + "; other channels in software",
-        )
-    return (
-        args + ["--hwdec=auto-safe"],
-        False,
-        f"mpv auto-safe (Raspberry Pi HEVC decoder: {'yes' if hevc else 'no'}, video output {vo})",
-    )
 
 
 def _read_all(pattern):

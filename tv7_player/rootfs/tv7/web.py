@@ -7,7 +7,7 @@ import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler
 
-from tv7 import cec, config, display, init7, mpvclient, player, settings, supervisor, support, system, tvosd
+from tv7 import cec, config, display, init7, mpvclient, player, settings, supervisor, support, system, tvinfo, tvmenu
 
 EVENTS_S = float(os.environ.get("TV7_EVENTS_S", "3"))  # /events: at least this often (live values)
 
@@ -45,7 +45,7 @@ def status_view():
         "autostopped": dict(player.state.autostopped) or None,
         "hdmi_stopped": {"channel": player.state.hdmi_stopped["name"]} if player.state.hdmi_stopped else None,
         "pending_restart": settings.pending_restart(),
-        "osd": tvosd.osd_state["on"],
+        "osd": tvinfo.osd_state["on"],
     }
 
 
@@ -99,10 +99,13 @@ class H(BaseHTTPRequestHandler):
             if u.path == "/key" and "k" in q:
                 if q["k"][0] not in cec.KEYS:
                     return self.reply(400, {"error": "k: " + ", ".join(sorted(cec.KEYS))})
-                tvosd.handle_key(q["k"][0])
+                tvmenu.handle_key(q["k"][0])
                 return self.reply(
                     200,
-                    {"menu": tvosd.menu["open"], "tab": tvosd.TABS[tvosd.menu["tab"]] if tvosd.menu["open"] else None},
+                    {
+                        "menu": tvmenu.menu["open"],
+                        "tab": tvmenu.TABS[tvmenu.menu["tab"]] if tvmenu.menu["open"] else None,
+                    },
                 )
             if u.path == "/volume" and ("v" in q or "d" in q):
                 player.touch()
@@ -147,8 +150,10 @@ class H(BaseHTTPRequestHandler):
                 if "on" in q:
                     if q["on"][0] not in ("0", "1"):
                         return self.reply(400, {"error": "on: 1 or 0"})
-                    return self.reply(200, tvosd.set_osd(q["on"][0] == "1", q.get("lang", [""])[0][:2].lower() or None))
-                return self.reply(200, {"on": tvosd.osd_state["on"]})
+                    return self.reply(
+                        200, tvinfo.set_osd(q["on"][0] == "1", q.get("lang", [""])[0][:2].lower() or None)
+                    )
+                return self.reply(200, {"on": tvinfo.osd_state["on"]})
             if u.path == "/support":
                 return self.reply(200, {"text": support.support_text()})
             if u.path == "/events":
