@@ -10,7 +10,7 @@ def override(a):
 
 def test_refresh_follows_the_stream(world, start_app):
     """Stream 50 fps, display preferred 3840x2160@60; 1080p50 is index 3, 1080p59.94 index 4."""
-    opts = world.options_file("options-auto.json", {"video_refresh": "auto", "video_mode": "auto"})
+    opts = world.options_file("options-auto.json", {"video_mode": "auto"})
     a = start_app(TV7_OPTIONS=opts)
     world.ready(quit=0, hw=False, fps=50.0)
     c, d = a.get("/play?channel=SRF%201")
@@ -28,7 +28,7 @@ def test_refresh_follows_the_stream(world, start_app):
 
 def test_started_with_preferred_mode_switches_to_50(world, start_app):
     """mpv was started without a display ("preferred" = 4K60 here); that start mode is known, so a 50 fps stream switches."""
-    opts = world.options_file("options-auto.json", {"video_refresh": "auto", "video_mode": "auto"})
+    opts = world.options_file("options-auto.json", {"video_mode": "auto"})
     a = start_app(TV7_OPTIONS=opts, TV7_VIDEO="vo=gpu pending=no hw=no mode=preferred")
     world.ready(quit=0, fps=50.0)
     c, d = a.get("/play?channel=SRF%201")

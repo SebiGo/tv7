@@ -106,7 +106,7 @@ def test_menu_settings_tab(tv, world):
     key(tv, "ok")
     d = key(tv, "left")
     m = osd(world, 8).get("data", "")
-    assert d["tab"] == "settings" and "HDMI port" in m and "Video output" not in m, "technical settings hidden"
+    assert d["tab"] == "settings" and "HDMI port" in m and "Picture resolution" not in m, "technical settings hidden"
     assert osd(world, 10).get("format") == "ass-events"
     for _ in range(15):
         key(tv, "down")  # the last entry: nerd mode (after stop and the technical info)
@@ -115,12 +115,11 @@ def test_menu_settings_tab(tv, world):
     key(tv, "ok")
     m = osd(world, 8).get("data", "")
     assert re.search(r"\\b1[^}]*\}Nerd mode", m), "nerd mode on: the selection stays on 'Nerd mode'"
-    assert "PICTURE AND HDMI" not in m.split("Nerd mode")[-1]
-    assert "SYSTEM" in m and "DISPLAY" in m, "settings grouped like the web UI, the TV entries in their own group"
+    assert "DISPLAY" in m and "SYSTEM" not in m, "the options in one list, the TV entries in their own group"
     for _ in range(25):
         key(tv, "up")
     m = osd(world, 8).get("data", "")
-    assert "Video output" in m, "nerd mode shows the technical settings too"
+    assert "Picture resolution" in m, "nerd mode shows the technical settings too"
     key(tv, "ok")
     m = osd(world, 8).get("data", "")
     assert (sup["options"] or {}).get("hdmi_port") == "HDMI-A-1" and "HDMI-A-1 · restart" in m, sup["options"]

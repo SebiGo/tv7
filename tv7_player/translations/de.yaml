@@ -3,45 +3,18 @@ configuration:
   hdmi_port:
     name: 'HDMI-Anschluss'
     description: 'An welchem HDMI-Ausgang der Fernseher hängt. auto findet ihn. Beim Raspberry Pi ist HDMI-A-1 der Anschluss neben der Stromversorgung.'
-  hdmi_disconnect:
-    name: 'Wenn der Fernseher aus ist'
-    description: 'Was passiert, wenn der Fernseher aus, abgesteckt oder auf einer anderen Quelle ist: resume (Standard) stoppt und setzt denselben Sender fort, sobald TV7 wieder gezeigt wird; stop stoppt nur; keep spielt weiter (für Receiver, die den Fernseher fälschlich als aus melden).'
   cec:
     name: 'Fernbedienung (HDMI-CEC)'
     description: 'TV7 mit der Fernbedienung von Fernseher oder Projektor bedienen. auto (Standard) nutzt sie, ausser die HDMI-CEC-Integration von Home Assistant tut das schon; die Option ist dann ausgegraut. off schaltet sie aus.'
   video_mode:
     name: 'Bildauflösung'
     description: 'auto (Standard) nimmt 1080p, das passt zu den Sendern. Höhere Auflösungen belasten nur das Gerät; der Fernseher skaliert das Bild genauso gut.'
-  video_refresh:
-    name: 'Bildwiederholrate'
-    description: 'auto (Standard) stellt die Bildwiederholrate des Fernsehers auf den Sender ein, für flüssige Bewegungen. 50 oder 60: fest.'
-  deinterlace:
-    name: 'Deinterlacing'
-    description: 'Ruhiges Bild bei Sendern im Zeilensprungverfahren (empfohlen).'
-  hardware_decoding:
-    name: 'Hardware-Dekodierung'
-    description: 'auto (Standard) nutzt wo möglich den Video-Decoder des Geräts, das hält es kühl und leise. no: aus.'
-  video_output:
-    name: 'Videoausgabe'
-    description: 'auto (Standard). Nur ändern, wenn eine Fehlermeldung darum bittet.'
   decode_speed:
     name: 'Dekodier-Tempo'
     description: 'quality (Standard). fast spart etwas Prozessorlast bei kaum sichtbar geringerer Bildqualität.'
-  audio_output:
-    name: 'Audioausgabe'
-    description: 'auto (Standard). Fehlt der Ton, pulseaudio oder alsa ausprobieren.'
-  audio_device:
-    name: 'Audiogerät (erweitert)'
-    description: 'Leer lassen. Nur für besondere Aufbauten.'
-  audio_language:
-    name: 'Tonsprache'
-    description: 'Bevorzugte Sprache, wenn ein Sender mehrere anbietet. auto: wie gesendet.'
   audio_channels:
     name: 'Tonkanäle'
     description: 'auto gibt Surround-Ton an den Receiver weiter; stereo sendet immer Stereo.'
-  start_volume:
-    name: 'Startlautstärke'
-    description: 'Lautstärke beim Start der App, 0 bis 130 (100 = unverändert).'
   idle_stop:
     name: 'Stopp ohne Bedienung'
     description: 'Stoppt die Wiedergabe nach so vielen Minuten ohne Bedienung, damit das Gerät nicht weiterspielt, wenn niemand schaut. off (Standard): nie.'

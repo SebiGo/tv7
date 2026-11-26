@@ -50,11 +50,8 @@ def probe_gpu(drm_args):
 def setup_video(opts, drm_args):
     """Video output, hardware decoding and output mode. Without a display the GPU cannot be probed and there are no modes yet: the
     choice stays pending (plain DRM) and is made again before mpv restarts once a display is there."""
-    choice = opts.get("video_output", "auto")
     pending = "no"
-    if choice in ("gpu", "drm"):
-        vo = choice
-    elif not display.hdmi_ok():
+    if not display.hdmi_ok():
         vo, pending = "drm", "yes"
     else:
         vo = "gpu" if probe_gpu(drm_args) else "drm"
@@ -65,24 +62,20 @@ def setup_video(opts, drm_args):
     render = sorted(glob.glob("/dev/dri/renderD*"))
     extra, hw, msg = display.pick_hwdec(
         vo,
-        opts.get("hardware_decoding", "auto"),
         help_text,
         display._read_all("/sys/class/video4linux/*/name"),
         os.uname().machine,
         render[0] if render else "",
     )
     port = "" if opts.get("hdmi_port", "auto") == "auto" else opts.get("hdmi_port")
-    mode, note = display.resolve_mode(str(opts.get("video_mode", "auto")), str(opts.get("video_refresh", "auto")), port)
+    mode, note = display.resolve_mode(str(opts.get("video_mode", "auto")), port)
     display.VIDEO.update(vo=vo, pending=pending, hw="yes" if hw else "no", mode=mode, extra=extra, msg=msg)
+    config.log_line(f"Video mode: {opts.get('video_mode', 'auto')} -> drm-mode={mode}" + (f" ({note})" if note else ""))
     config.log_line(
-        f"Video mode: {opts.get('video_mode', 'auto')}/{opts.get('video_refresh', 'auto')} Hz -> drm-mode={mode}"
-        + (f" ({note})" if note else "")
-    )
-    config.log_line(
-        f"Video output ({choice}): {vo}"
+        f"Video output: {vo}"
         + (" for now (no display connected; chosen again when one is)" if pending == "yes" else "")
     )
-    config.log_line(f"Hardware decoding ({opts.get('hardware_decoding', 'auto')}): {msg}")
+    config.log_line(f"Hardware decoding: {msg}")
 
 
 def pulse_sinks():
@@ -96,29 +89,20 @@ def pulse_sinks():
         return []
 
 
-def audio_args(opts, connector):
+def audio_args(connector):
     """Audio device. Home Assistant's audio service (PulseAudio) may already own the HDMI ALSA card ("Device or resource busy"), so
-    in "auto" a PulseAudio HDMI sink comes first, then the ALSA device of the connector (HDMI-A-1 = vc4hdmi0, HDMI-A-2 = vc4hdmi1),
-    then any ALSA HDMI device; otherwise mpv chooses. An explicit audio_device (mpv syntax) overrides all of this."""
-    dev = opts.get("audio_device") or ""
-    if not dev or dev == "auto":
-        pulse = next((f"pulse/{x['name']}" for x in pulse_sinks() if "hdmi" in x["name"].lower()), "")
-        try:
-            aplay = subprocess.run(["aplay", "-L"], capture_output=True, text=True, timeout=5).stdout.splitlines()
-        except Exception:
-            aplay = []
-        n = connector.rsplit("-", 1)[-1] if connector else ""
-        mine = f"hdmi:CARD=vc4hdmi{int(n) - 1},DEV=0" if n.isdigit() and int(n) >= 1 else None
-        alsa = (
-            f"alsa/{mine}"
-            if mine and mine in aplay
-            else next((f"alsa/{d}" for d in aplay if d.startswith("hdmi:")), "")
-        )
-        out = opts.get("audio_output", "auto")
-        dev = pulse if out == "pulseaudio" else alsa if out == "alsa" else (pulse or alsa)
-        config.log_line(
-            f"Audio device ({out}): {dev}" if dev else f"No HDMI audio device found (audio_output={out}), mpv chooses"
-        )
+    a PulseAudio HDMI sink comes first, then the ALSA device of the connector (HDMI-A-1 = vc4hdmi0, HDMI-A-2 = vc4hdmi1), then
+    any ALSA HDMI device; otherwise mpv chooses."""
+    pulse = next((f"pulse/{x['name']}" for x in pulse_sinks() if "hdmi" in x["name"].lower()), "")
+    try:
+        aplay = subprocess.run(["aplay", "-L"], capture_output=True, text=True, timeout=5).stdout.splitlines()
+    except Exception:
+        aplay = []
+    n = connector.rsplit("-", 1)[-1] if connector else ""
+    mine = f"hdmi:CARD=vc4hdmi{int(n) - 1},DEV=0" if n.isdigit() and int(n) >= 1 else None
+    alsa = f"alsa/{mine}" if mine and mine in aplay else next((f"alsa/{d}" for d in aplay if d.startswith("hdmi:")), "")
+    dev = pulse or alsa
+    config.log_line(f"Audio device: {dev}" if dev else "No HDMI audio device found, mpv chooses")
     return [f"--audio-device={dev}"] if dev else []
 
 
@@ -138,7 +122,7 @@ def mpv_base_args(opts, drm_args, connector):
         "--script-opts-append=osc-idlescreen=no",  # mpv's own idle screen is replaced by the TV7 logo (tv7-idle.lua)
         "--deinterlace=no",  # switched on per channel (update_deinterlace)
         "--sid=no",
-        f"--volume={opts.get('start_volume', 100)}",
+        "--volume=100",
         "--ao=pulse,alsa",
         *drm_args,
     ]
@@ -146,8 +130,6 @@ def mpv_base_args(opts, drm_args, connector):
         args.append("--msg-level=all=v")  # option debug: mpv's detailed log in the app log
     if opts.get("decode_speed") == "fast":  # skip the in-loop filter of non-reference frames: less CPU
         args += ["--vd-lavc-skiploopfilter=nonref", "--vd-lavc-fast"]
-    if opts.get("audio_language", "auto") != "auto":
-        args.append(f"--alang={opts['audio_language']},eng")
     if opts.get("audio_channels") == "stereo":
         args.append("--audio-channels=stereo")
     try:
@@ -162,7 +144,7 @@ def mpv_base_args(opts, drm_args, connector):
         ]
     except Exception as e:
         config.log_line(f"Idle screen: the logo could not be prepared ({e}), the screen stays black")
-    return args + audio_args(opts, connector)
+    return args + audio_args(connector)
 
 
 def wait_hdmi():

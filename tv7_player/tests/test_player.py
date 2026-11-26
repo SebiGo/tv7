@@ -19,35 +19,30 @@ RENDER = "/dev/dri/renderD128"
 
 def test_hwdec_pi5():
     """H.265 in hardware on the bottom plane, everything else in software on the overlay plane."""
-    a, hw, msg = display.pick_hwdec("gpu", "auto", HELP_PI, PI5, "aarch64", RENDER)
+    a, hw, msg = display.pick_hwdec("gpu", HELP_PI, PI5, "aarch64", RENDER)
     assert hw and "--hwdec=drm" in a and "--hwdec-codecs=hevc" in a, a
     assert "--drm-draw-plane=overlay" in a and "--drm-drmprime-video-plane=primary" in a, a
 
 
 def test_hwdec_pi4():
-    a, hw, msg = display.pick_hwdec("gpu", "auto", HELP_PI, PI4 + "\nbcm2835-codec-encode", "aarch64", RENDER)
+    a, hw, msg = display.pick_hwdec("gpu", HELP_PI, PI4 + "\nbcm2835-codec-encode", "aarch64", RENDER)
     assert hw and "--hwdec=drm,v4l2m2m-copy" in a and "--hwdec-codecs=hevc,h264" in a, "H.264 on the stateful decoder"
-    a, hw, msg = display.pick_hwdec("drm", "auto", HELP_PI, PI4, "aarch64", "")
+    a, hw, msg = display.pick_hwdec("drm", HELP_PI, PI4, "aarch64", "")
     assert not hw and "--hwdec=v4l2m2m-copy" in a and "--vo=drm" in a, "without GPU output: no H.265 overlay"
     assert "--drm-draw-plane=overlay" not in a
 
 
-def test_hwdec_off():
-    a, hw, msg = display.pick_hwdec("gpu", "no", HELP_PI, PI4, "aarch64", RENDER)
-    assert not hw and "--hwdec=no" in a and msg == "off", a
-
-
 def test_hwdec_x86():
-    a, hw, msg = display.pick_hwdec("gpu", "auto", HELP_X86, "", "x86_64", RENDER)
+    a, hw, msg = display.pick_hwdec("gpu", HELP_X86, "", "x86_64", RENDER)
     assert not hw and "--hwdec=vaapi" in a, "VAAPI with GPU output: vaapi for everything"
-    a, hw, msg = display.pick_hwdec("drm", "auto", HELP_X86, "", "x86_64", RENDER)
+    a, hw, msg = display.pick_hwdec("drm", HELP_X86, "", "x86_64", RENDER)
     assert "--hwdec=vaapi-copy" in a, "DRM output: vaapi-copy"
-    a, hw, msg = display.pick_hwdec("gpu", "auto", HELP_X86, "", "x86_64", "")
+    a, hw, msg = display.pick_hwdec("gpu", HELP_X86, "", "x86_64", "")
     assert "--hwdec=auto-safe" in a, "without a render node: mpv auto-safe"
 
 
 def test_hwdec_unknown_decoder():
-    a, hw, msg = display.pick_hwdec("gpu", "auto", HELP_PI, "pispbe", "aarch64", RENDER)
+    a, hw, msg = display.pick_hwdec("gpu", HELP_PI, "pispbe", "aarch64", RENDER)
     assert not hw and "--hwdec=auto-safe" in a, a
 
 
@@ -64,15 +59,12 @@ def aplay(monkeypatch):
 def test_audio_device(aplay, monkeypatch):
     sink = "alsa_output.platform-107c701400.hdmi.hdmi-stereo"
     monkeypatch.setattr(mpvhost, "pulse_sinks", lambda: [{"name": sink, "state": "IDLE"}])
-    assert mpvhost.audio_args({}, "card1-HDMI-A-1") == [f"--audio-device=pulse/{sink}"], "auto: PulseAudio first"
-    assert mpvhost.audio_args({"audio_output": "alsa"}, "card1-HDMI-A-2") == [
-        "--audio-device=alsa/hdmi:CARD=vc4hdmi1,DEV=0"
-    ]
+    assert mpvhost.audio_args("card1-HDMI-A-1") == [f"--audio-device=pulse/{sink}"], "PulseAudio first"
     monkeypatch.setattr(mpvhost, "pulse_sinks", lambda: [])
-    assert mpvhost.audio_args({}, "card1-HDMI-A-1") == ["--audio-device=alsa/hdmi:CARD=vc4hdmi0,DEV=0"], "no PulseAudio"
-    assert mpvhost.audio_args({"audio_device": "alsa/x"}, "card1-HDMI-A-1") == ["--audio-device=alsa/x"], (
-        "explicit wins"
+    assert mpvhost.audio_args("card1-HDMI-A-1") == ["--audio-device=alsa/hdmi:CARD=vc4hdmi0,DEV=0"], (
+        "no PulseAudio: ALSA"
     )
+    assert mpvhost.audio_args("card1-HDMI-A-2") == ["--audio-device=alsa/hdmi:CARD=vc4hdmi1,DEV=0"], "of the connector"
 
 
 @pytest.fixture

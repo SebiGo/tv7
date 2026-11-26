@@ -40,12 +40,11 @@ def deinterlace_possible(hwdec):
     return hwdec == "no" or hwdec.endswith("-copy") or hwdec.startswith("vaapi")
 
 
-def update_deinterlace(enabled):
-    """Apply the deinterlace option (enabled) where the current decoder allows it (see deinterlace_possible). "auto"
-    deinterlaces only frames that are interlaced (1080i channels), not the progressive ones (720p50, 1080p); mpv without
-    "auto" gets "yes"."""
+def update_deinterlace():
+    """Deinterlace where the current decoder allows it (see deinterlace_possible). "auto" deinterlaces only frames that are
+    interlaced (1080i channels), not the progressive ones (720p50, 1080p); mpv without "auto" gets "yes"."""
     try:
-        if not (enabled and deinterlace_possible(mpvclient.prop("hwdec-current"))):
+        if not deinterlace_possible(mpvclient.prop("hwdec-current")):
             mpvclient.mpv("set_property", "deinterlace", False)
         elif mpvclient.mpv("set_property", "deinterlace", "auto").get("error") != "success":
             mpvclient.mpv("set_property", "deinterlace", True)
@@ -302,27 +301,20 @@ def png_bytes_to_bgra(data):
     return w, h, bytes(out)
 
 
-def resolve_mode(video_mode, refresh, port, modes=None):
-    """Value for mpv --drm-mode plus a note. 'preferred' / 'highest' pass through; a preset is resolved to the mode INDEX of
-    the connector (a "1920x1080@50" spec could match an interlaced mode first). The display must offer the preset."""
-    # auto: 1080p if offered (see auto_size); refresh auto: follows the stream later (match_refresh)
-    if video_mode in ("", "auto"):
+def resolve_mode(video_mode, port, modes=None):
+    """The mode mpv starts with (--drm-mode) plus a note. 'preferred' / 'highest' pass through; a size is resolved to the mode
+    INDEX of the connector (a "1920x1080@50" spec could match an interlaced mode first), at the start rate (start_rate); the
+    refresh rate then follows the stream (player.match_refresh). The display must offer the size."""
+    if video_mode in ("", "auto"):  # 1080p if offered (see auto_size)
         modes = drm_modes() if modes is None else modes
         for lst in [modes[port]] if port and port in modes else list(modes.values()):
             size = auto_size(lst)
             cands = [
                 m for m in lst if size and (m["w"], m["h"]) == size and not m["interlaced"] and m["hz"] is not None
             ]
-            if not cands:
-                continue
-            if refresh in ("", "auto"):
+            if cands:
                 return str(start_rate(lst, cands)["index"]), ""
-            near = [m for m in cands if abs(m["hz"] - float(refresh)) < 1.0]
-            if near:
-                return str(near[0]["index"]), ""
-        if refresh in ("", "auto"):
-            return "preferred", ""
-        return "preferred", f"{refresh} Hz is not offered by the display, using the preferred mode"
+        return "preferred", ""
     if video_mode == "highest":
         return "highest", ""
     if video_mode not in VIDEO_PRESETS:
@@ -340,16 +332,7 @@ def resolve_mode(video_mode, refresh, port, modes=None):
     cands = [m for m in lst if m["w"] == w and m["h"] == h and not m["interlaced"]]
     if not cands:
         return "preferred", f"{video_mode} is not offered by the display, using the preferred mode"
-    if refresh in ("", "auto"):
-        return str(start_rate(lst, cands)["index"]), ""
-    note = ""
-    near = [m for m in cands if m["hz"] is not None and abs(m["hz"] - float(refresh)) < 1.0]
-    if near:
-        cands = near
-    elif any(m["hz"] is not None for m in cands):
-        note = f"{video_mode} is not offered at {refresh} Hz, using another refresh rate"
-        cands = sorted(cands, key=lambda m: -(m["hz"] or 0))
-    return str(cands[0]["index"]), note
+    return str(start_rate(lst, cands)["index"]), ""
 
 
 def current_drm_mode():
@@ -412,7 +395,7 @@ def set_mode_override(mode):
     VIDEO["override"] = str(mode)
 
 
-def pick_hwdec(vo, hardware_decoding, hwdec_help, v4l2_names, arch, render_node):
+def pick_hwdec(vo, hwdec_help, v4l2_names, arch, render_node):
     """mpv arguments for the video output and the hardware decoding of this device. Returns (arguments, H.265 in hardware, log text).
     - Raspberry Pi 5 and 4, H.265: rpi-hevc-dec (V4L2 stateless, --hwdec=drm). These frames go straight to the display's bottom
       ("primary") plane; the GPU draws everything else (software-decoded channels, menu, technical info, idle logo) on the overlay
@@ -429,8 +412,6 @@ def pick_hwdec(vo, hardware_decoding, hwdec_help, v4l2_names, arch, render_node)
     h264 = "bcm2835-codec-decode" in (v4l2_names or "") and has("v4l2m2m-copy")
     vaapi = arch == "x86_64" and bool(render_node) and has("vaapi")
     args = ["--vo=gpu", "--gpu-context=drm"] if vo == "gpu" else ["--vo=drm"]
-    if hardware_decoding == "no":
-        return args + ["--hwdec=no"], False, "off"
     if vaapi:
         return (
             args + ["--hwdec=vaapi" if vo == "gpu" else "--hwdec=vaapi-copy"],

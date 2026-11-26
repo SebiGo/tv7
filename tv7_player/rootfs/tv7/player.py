@@ -75,7 +75,7 @@ def restart_mpv(log, reason):
     if mpvclient.prop("pid") is None:
         raise RuntimeError("mpv did not come back after the restart")
     for k, v in settings.current_values().items():  # live settings are not in the new mpv's command line
-        if k in ("audio_language", "audio_channels"):
+        if k == "audio_channels":
             settings.apply_live(k, v)
     if keep["volume"] is not None:
         mpvclient.mpv("set_property", "volume", keep["volume"])
@@ -171,7 +171,7 @@ def _start(ch, source):
                         t_end = time.time() + START_TIMEOUT
                         while time.time() < t_end and not mpvclient.playing():
                             time.sleep(0.5)
-                    display.update_deinterlace(settings.current_values().get("deinterlace", True))
+                    display.update_deinterlace()
                     return {"ok": True, "channel": ch["name"], "source": src, "log": log}
                 if (
                     display.connectors()
@@ -193,9 +193,9 @@ def _start(ch, source):
 
 
 def match_refresh(log):
-    """video_refresh=auto: make the display refresh rate follow the stream's frame rate. Returns True if mpv was restarted."""
+    """Make the display refresh rate follow the stream's frame rate. Returns True if mpv was restarted."""
     vals = settings.current_values()
-    if vals.get("video_refresh") != "auto" or vals.get("video_mode") == "highest":
+    if vals.get("video_mode") == "highest":
         return False
     fps = mpvclient.prop("container-fps") or mpvclient.prop("estimated-vf-fps")
     port = vals.get("hdmi_port") if vals.get("hdmi_port") != "auto" else ""
@@ -205,9 +205,9 @@ def match_refresh(log):
     if not cur:  # no override yet: the mode mpv was started with
         cur = display.video_state()["mode"]
     if not cur:  # not known (mpv started by someone else): compute it the same way
-        start = {k: settings.applied_value(k) for k in ("video_mode", "video_refresh", "hdmi_port")}
+        start = {k: settings.applied_value(k) for k in ("video_mode", "hdmi_port")}
         port0 = start["hdmi_port"] if start["hdmi_port"] != "auto" else ""
-        cur = display.resolve_mode(start["video_mode"], start["video_refresh"], port0, modes)[0]
+        cur = display.resolve_mode(start["video_mode"], port0, modes)[0]
     if cur == "preferred":  # find the index of the display's preferred mode
         lists = [modes[port]] if port and port in modes else list(modes.values())
         cur = next((str(m["index"]) for lst in lists for m in lst if m["preferred"]), "")
@@ -224,10 +224,9 @@ HDMI_POLL_S = float(os.environ.get("TV7_HDMI_POLL_S", "2"))
 
 
 def hdmi_watch_step(timers):
-    """One check. Stops playback when no HDMI display is connected for HDMI_OFF_S (option hdmi_disconnect: resume|stop) and,
-    with resume, starts the same channel again when the display is back for HDMI_BACK_S. timers keeps the times between calls."""
-    mode = settings.current_values().get("hdmi_disconnect", "resume")
-    if not display.connectors() or mode == "keep":
+    """One check. Stops playback when no HDMI display is connected for HDMI_OFF_S and starts the same channel again when the
+    display is back for HDMI_BACK_S. timers keeps the times between calls."""
+    if not display.connectors():
         timers.clear()
         state.hdmi_stopped.clear()
         return
@@ -242,12 +241,10 @@ def hdmi_watch_step(timers):
         timers.pop("on_since", None)
         timers.setdefault("off_since", now)
     if not ok and state.current["pk"] and not state.hdmi_stopped and now - timers["off_since"] >= HDMI_OFF_S:
-        player(_hdmi_stop, mode)
+        player(_hdmi_stop)
     elif ok and state.hdmi_stopped and now - timers["on_since"] >= HDMI_BACK_S:
         ch = dict(state.hdmi_stopped)
         state.hdmi_stopped.clear()
-        if mode != "resume":
-            return
         try:
             res = start(init7.find_channel(ch["pk"]), ch["source"] if ch["source"] in ("multicast", "hls") else "auto")
             config.log_line(
@@ -258,7 +255,7 @@ def hdmi_watch_step(timers):
             config.log_line(f"HDMI display back: {ch['name']} could not be started: {e}")
 
 
-def _hdmi_stop(mode):
+def _hdmi_stop():
     if not state.current["pk"] or state.hdmi_stopped:
         return
     cur = state.current
@@ -269,8 +266,8 @@ def _hdmi_stop(mode):
         pass
     _clear_current()
     config.log_line(
-        f"No HDMI display for {HDMI_OFF_S:g} s: playback of {state.hdmi_stopped['name']} stopped"
-        + (", it resumes when the display is back" if mode == "resume" else "")
+        f"No HDMI display for {HDMI_OFF_S:g} s: playback of {state.hdmi_stopped['name']} stopped, it resumes when the display"
+        " is back"
     )
 
 
@@ -316,23 +313,20 @@ def tv_standby():
 
 
 def tv_gone(reason):
-    """The TV switched to standby (at once) or to another source (after CEC_AWAY_S): stop like for a missing display
-    (option hdmi_disconnect: resume = start again when the TV shows the app again, stop = only stop, keep = keep playing)."""
+    """The TV switched to standby (at once) or to another source (after CEC_AWAY_S): stop like for a missing display, and
+    start the same channel again when the TV shows the app again."""
     player(_tv_gone, reason)
 
 
 def _tv_gone(reason):
-    mode = settings.current_values().get("hdmi_disconnect", "resume")
-    if mode == "keep" or not state.current["pk"]:
+    if not state.current["pk"]:
         return
     state.tv_resume.clear()
-    if mode == "resume":
-        state.tv_resume.update(pk=state.current["pk"], source=state.current["source"])
+    state.tv_resume.update(pk=state.current["pk"], source=state.current["source"])
     state.tv_away_since = None
     auto_stop(
         "cec",
-        f"HDMI-CEC: {reason}: playback of {state.current['name']} stopped"
-        + (", it resumes when the TV shows TV7 again" if mode == "resume" else ""),
+        f"HDMI-CEC: {reason}: playback of {state.current['name']} stopped, it resumes when the TV shows TV7 again",
     )
 
 

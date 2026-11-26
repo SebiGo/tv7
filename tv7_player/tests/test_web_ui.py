@@ -50,8 +50,8 @@ def test_settings_view(app):
     items = {i["key"]: i for i in s["items"]}
     assert c == 200 and s["labels"]["video_mode"]["name"] == "Bildauflösung" and s["can_save"] is True
     assert items["video_mode"]["restart"] is True and "api_token" not in items
-    assert all(items[k]["nerd"] for k in ("video_mode", "hardware_decoding", "audio_device", "debug"))
-    everyday = ("hdmi_port", "hdmi_disconnect", "audio_language", "start_volume", "audio_channels", "idle_stop")
+    assert all(items[k]["nerd"] for k in ("video_mode", "decode_speed", "debug"))
+    everyday = ("hdmi_port", "cec", "audio_channels", "idle_stop")
     assert not any(items[k]["nerd"] for k in everyday), "the everyday settings are not nerd-only"
     unavailable = items["video_mode"]["unavailable"]
     assert "720p" in unavailable and "2160p" not in unavailable and "1080p" not in unavailable, "live choices"
@@ -63,27 +63,26 @@ def test_settings_validation(app):
     assert app.post("/settings", {"values": {}}, {"X-TV7-UI": "0"})[0] == 403, "POST needs the X-TV7-UI header"
     assert app.post("/settings", {"values": {"video_mode": "8k"}})[0] == 400
     assert app.post("/settings", {"values": {"listen": "0.0.0.0"}})[0] == 400, "option that does not exist (any more)"
-    assert app.post("/settings", {"values": {"start_volume": "loud"}})[0] == 400, "wrong type"
+    assert app.post("/settings", {"values": {"debug": "yes"}})[0] == 400, "wrong type"
+    assert app.post("/settings", {"values": {"start_volume": 90}})[0] == 400, "a removed option"
 
 
 def test_settings_save(app, world):
     sup = world.sup
-    c, d = app.post("/settings", {"values": {"video_mode": "2160p", "audio_channels": "stereo", "audio_language": "fra",
-                                             "start_volume": 90}})  # fmt: skip
+    c, d = app.post("/settings", {"values": {"video_mode": "2160p", "audio_channels": "stereo", "idle_stop": "120"}})
     assert c == 200 and sup["options"]["video_mode"] == "2160p" and sup["auth"] == "Bearer tok", sup["options"]
-    assert "api_token" not in sup["options"] and "subtitles" not in sup["options"], "options of older versions dropped"
+    assert not {"api_token", "subtitles", "video_refresh"} & set(sup["options"]), "options the schema lacks are dropped"
     assert d["pending_restart"] == ["video_mode"], "restart-only setting is pending"
-    assert set(d["applied_now"]) == {"audio_channels", "audio_language", "start_volume"}, "live ones are applied now"
+    assert set(d["applied_now"]) == {"audio_channels", "idle_stop"}, "live ones are applied now"
     assert app.get("/status")[1]["pending_restart"] == ["video_mode"]
-    app.post("/settings", {"values": {"audio_channels": "auto", "video_mode": "auto", "start_volume": 100,
-                                      "audio_language": "auto"}})  # fmt: skip
+    app.post("/settings", {"values": {"audio_channels": "auto", "video_mode": "auto", "idle_stop": "off"}})
     assert app.get("/status")[1]["pending_restart"] == [], "setting the old value again clears the flag"
 
 
 def test_supervisor_rejection_and_restart(app, world):
     world.sup["reject"] = True
     try:
-        c, d = app.post("/settings", {"values": {"deinterlace": False}})
+        c, d = app.post("/settings", {"values": {"debug": True}})
     finally:
         world.sup["reject"] = False
     assert c == 502 and "invalid option" in d["error"], d

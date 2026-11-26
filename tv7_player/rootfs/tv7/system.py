@@ -55,12 +55,6 @@ def environment():
         "cec": dict(cec.cec_state),
         "choices": {
             "hdmi_port": ["auto"] + [p["name"] for p in ports],
-            "audio_output": ["auto", "pulseaudio", "alsa"],
-            "audio_device": [
-                d["name"]
-                for d in devices
-                if d["name"].split("/")[0] in ("pulse", "alsa") and "hdmi" in d["name"].lower()
-            ],
         },
     }
 

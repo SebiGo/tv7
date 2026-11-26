@@ -22,7 +22,6 @@
   * { box-sizing: border-box; }
   html { background: var(--bg); }
   svg.i { width: 1em; height: 1em; fill: currentColor; display: block; }
-  #env-intro { margin: 0 4px 12px; }
   html { scrollbar-color: var(--muted) transparent; }
   body { margin: 0; color: var(--text); min-height: 100vh;
     background: radial-gradient(1200px 500px at 85% -10%, var(--glow), transparent 60%), linear-gradient(180deg, var(--bg), var(--bg2)) fixed;
@@ -53,10 +52,13 @@
   .nerd-card::before { content: "<nerdmode>"; display: block; color: var(--accent); font-weight: 700; margin-bottom: 10px; }
   .nerd-card::after { content: "</nerdmode>"; display: block; color: var(--accent); font-weight: 700; margin-top: 10px; }
   .nerd-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr)); gap: 14px; }
-  .nerd-grid table { font-size: 13px; }
-  .nerd-grid td { padding: 4px 8px; word-break: break-word; }
+  /* every block of nerd mode: its heading, then its content in a frame (like the two logs) */
+  .nerd-frame { margin: 6px 0 0; padding: 10px 12px; border-radius: 12px; background: var(--card-solid); border: 1px solid var(--line); }
+  .nerd-env { display: grid; gap: 14px; margin-top: 14px; }
+  .nerd-card table { font-size: 13px; }
+  .nerd-card td { padding: 4px 8px; word-break: break-word; }
   .nerd-grid td:first-child { color: var(--muted); width: 45%; }
-  .nerd-grid h2, .nerd-log-head h2 { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; margin-bottom: 4px; }
+  .nerd-grid h2, .nerd-env h2, .nerd-log-head h2 { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; margin: 0; }
   .nerd-log-head { display: flex; align-items: center; margin-top: 16px; }
   .nerd-log-head h2 { margin: 0; }
   .nerd-log { max-height: 260px; overflow: auto; margin: 6px 0 0; padding: 10px 12px; border-radius: 12px; background: var(--card-solid); border: 1px solid var(--line); font-size: 12px; white-space: pre-wrap; word-break: break-word; }
@@ -241,18 +243,16 @@
   <section id="view-set" hidden>
     <div class="card support"><button class="btn primary" id="b-support"></button><p class="hint" id="support-hint"></p>
       <textarea id="support-text" readonly hidden></textarea></div>
-    <details class="card" id="env-box"><summary id="env-sum"></summary>
-    <p class="hint" id="env-intro"></p>
-    <div class="card"><h2 id="h-hdmi"></h2><div id="env-hdmi"></div></div>
-    <div class="card"><h2 id="h-cec">HDMI-CEC</h2><div id="env-cec"></div></div>
-    <div class="card"><h2 id="h-audio"></h2><div id="env-audio"></div></div>
-    <div class="card"><h2 id="h-video"></h2><div id="env-video"></div></div>
-    <div class="card"><h2 id="h-opts"></h2><div id="env-opts"></div></div>
-  </details>
     <p class="hint" id="set-intro" style="margin:0 4px 12px"></p>
     <div id="set-groups"></div>
     <div class="card nerd-card" id="nerd-card" hidden>
       <div class="nerd-grid" id="nerd-grid"></div>
+      <div class="nerd-env">
+        <div><h2 id="h-hdmi"></h2><div class="nerd-frame" id="env-hdmi"></div></div>
+        <div><h2 id="h-cec">HDMI-CEC</h2><div class="nerd-frame" id="env-cec"></div></div>
+        <div><h2 id="h-audio"></h2><div class="nerd-frame" id="env-audio"></div></div>
+        <div><h2 id="h-opts"></h2><div class="nerd-frame" id="env-opts"></div></div>
+      </div>
       <div class="nerd-log-head"><h2 id="h-nerd-log"></h2><span id="nerd-copy"></span></div>
       <pre class="nerd-log" id="nerd-log"></pre>
       <div class="nerd-log-head"><h2 id="h-cec-log"></h2><span id="cec-copy"></span></div>
@@ -309,24 +309,23 @@ let channels = [], favs = [], status = {}, source = "auto", busy = false, nerdOn
 /* ---------- static labels ---------- */
 $("b-prev").innerHTML = ICON.prev; $("b-next").innerHTML = ICON.next; $("b-stop").innerHTML = ICON.stop;
 $("b-vup").innerHTML = ICON.plus; $("b-vdown").innerHTML = ICON.minus; $("b-mute").innerHTML = ICON.vol;
-$("tab-player").textContent = T.player; $("tab-set").textContent = T.settings; $("env-sum").textContent = T.env;
+$("tab-player").textContent = T.player; $("tab-set").textContent = T.settings;
 $("h-fav").textContent = "★ " + T.favTitle; $("h-srg").textContent = T.listSrg; $("h-tv7").textContent = T.listTv7;
 $("banner-title").textContent = T.restartTitle; $("b-restart").textContent = T.restartBtn; $("l-audio").textContent = T.audioTrack; $("l-sub").textContent = T.subTrack;
 $("set-intro").textContent = T.setIntro;
 $("q").placeholder = T.search; $("b-refresh").textContent = T.refresh; $("b-stop").setAttribute("aria-label", T.stop); $("b-stop").title = T.stop; $("kicker").textContent = T.nowPlaying;
 $("b-prev").title = T.prev; $("b-prev").setAttribute("aria-label", T.prev); $("b-next").title = T.next; $("b-next").setAttribute("aria-label", T.next);
-$("h-hdmi").textContent = T.hdmi; $("h-audio").textContent = T.audio; $("h-video").textContent = T.video; $("h-opts").textContent = T.opts;
-$("env-intro").textContent = T.introEnv; $("b-support").textContent = T.supportBtn; $("support-hint").textContent = T.supportHint;
+$("h-hdmi").textContent = T.hdmi; $("h-audio").textContent = T.audio; $("h-opts").textContent = T.opts;
+$("b-support").textContent = T.supportBtn; $("support-hint").textContent = T.supportHint;
 $("nerd-toggle").textContent = T.nerd; $("nerd-toggle").title = T.nerdTip; $("h-nerd-log").textContent = T.nLog; $("h-cec-log").textContent = T.nCecLog;
 
 /* ---------- tabs ---------- */
 const TABS = { player: "tab-player", set: "tab-set" };
 function tab(name) {
   for (const n of Object.keys(TABS)) { $("view-" + n).hidden = n !== name; $(TABS[n]).setAttribute("aria-selected", n === name); }
-  if (name === "set") { loadSettings(); if (nerdOn) loadNerd(); }
+  if (name === "set") { loadSettings(); if (nerdOn) { loadNerd(); loadEnv(); } }
 }
 $("tab-player").onclick = () => tab("player"); $("tab-set").onclick = () => tab("set");
-$("env-box").addEventListener("toggle", () => { if ($("env-box").open) loadEnv(); });
 
 /* ---------- channels ---------- */
 function tile(c) {
@@ -390,7 +389,7 @@ function renderStatus() {
   const st = s.stream || {}, out = s.output || {};
   const res = (w, h, f, unit) => (w && h ? `${w}×${h}` : "") + (f ? `${w && h ? " @ " : ""}${Math.round(f)}${unit}` : "");
   const as = s.autostopped;
-  if (!busy && hs && !s.channel) $("now-sub").textContent = hs.resume ? T.hdmiPausedResume : T.hdmiPaused;
+  if (!busy && hs && !s.channel) $("now-sub").textContent = T.hdmiPausedResume;
   else if (!busy && as && !s.channel) $("now-sub").textContent = as.reason === "cec" ? T.stoppedCec : T.stoppedIdle.replace("{m}", as.minutes);
   else if (!busy) $("now-sub").textContent = s.playing && nerdOn ? [s.source && `${T.via} ${s.source}`, s.video, s.audio, st.w ? `${T.streamRes} ${res(st.w, st.h, st.fps, " fps")}` : null].filter(Boolean).join(" · ") : "";
   $("hero").classList.toggle("playing", !!s.playing);
@@ -513,13 +512,7 @@ function buildControl(it, val, data) {
     const i = el("input", { type: "checkbox", checked: !!val }), w = el("label", { className: "switch" }, i, el("span"));
     setCtl[k] = () => i.checked; return w;
   }
-  if (it.type === "int") {
-    const i = el("input", { type: "number", min: it.min, max: it.max, step: 1, value: val });
-    setCtl[k] = () => parseInt(i.value, 10); return i;
-  }
-  let opts;
-  if (it.type === "choice") opts = it.choices.map(c => [c, optLabel(it, c, un.includes(c)), un.includes(c) && c !== val]);
-  else { const sug = it.suggestions || []; opts = [["", T.autoOpt, false], ...[...new Set([val, ...sug])].filter(Boolean).map(n => [n, n, false])]; }
+  const opts = it.choices.map(c => [c, optLabel(it, c, un.includes(c)), un.includes(c) && c !== val]);
   const sel = el("select", {}, opts.map(([v, l, dis]) => el("option", { value: v, disabled: dis, selected: String(v) === String(val) }, l)));
   setCtl[k] = () => sel.value;
   if (it.locked) { sel.disabled = true; return el("div", {}, sel, el("p", { className: "hint" }, T["cecLocked_" + it.locked] || "")); }
@@ -533,45 +526,40 @@ async function loadSettings() {
   // Technical settings (nerd) show only in nerd mode, unless they differ from the default (then they stay visible, so nothing is changed unseen).
   // The hidden attribute is set by applyNerd() (also when nerd mode is switched while the settings are open).
   const nerdOnly = it => it.nerd && String(d.values[it.key]) === String(d.defaults[it.key]);
-  for (const g of ["video", "audio", "system"]) {
-    const items = d.items.filter(x => x.group === g);
-    const card = el("div", { className: "card group" }, el("h2", {}, T["g_" + g]));
-    if (items.every(nerdOnly)) card.dataset.nerdOnly = "1";
-    for (const it of items) {
-      const L = d.labels[it.key] || { name: it.key, description: "" };
-      const field = el("div", { className: "field" },
-        el("div", { className: "fname" }, L.name, it.restart ? el("span", { className: "tag" }, T.needsRestart) : null),
-        el("div", { className: "fdesc" }, L.description),
-        el("div", { className: "fctl" }, buildControl(it, d.values[it.key], d)));
-      if (nerdOnly(it)) field.dataset.nerdOnly = "1";
-      card.append(field);
-    }
-    // One save button per section; it always saves all sections together.
-    const btn = el("button", { className: "btn primary save-btn", disabled: !d.can_save, onclick: () => saveSettings(g) }, T.save);
-    card.append(el("div", { className: "savebar" }, btn, el("span", { className: "sub save-state", id: "save-state-" + g },
-      d.can_save ? "" : T.cannotSave)));
-    root.append(card);
+  const card = el("div", { className: "card group" }, el("h2", {}, T.settings));
+  for (const it of d.items) {
+    const L = d.labels[it.key] || { name: it.key, description: "" };
+    const field = el("div", { className: "field" },
+      el("div", { className: "fname" }, L.name, it.restart ? el("span", { className: "tag" }, T.needsRestart) : null),
+      el("div", { className: "fdesc" }, L.description),
+      el("div", { className: "fctl" }, buildControl(it, d.values[it.key], d)));
+    if (nerdOnly(it)) field.dataset.nerdOnly = "1";
+    card.append(field);
   }
+  const btn = el("button", { className: "btn primary save-btn", disabled: !d.can_save, onclick: saveSettings }, T.save);
+  card.append(el("div", { className: "savebar" }, btn, el("span", { className: "sub save-state", id: "save-state" },
+    d.can_save ? "" : T.cannotSave)));
+  root.append(card);
   $("version").textContent = d.version ? `TV7 Player v${d.version}` : "";
   applyNerd();
   renderBanner(d.pending_restart || []);
 }
-function saveState(g, text) { const e = $("save-state-" + g); if (e) e.textContent = text; }
-async function saveSettings(g) {
+function saveState(text) { const e = $("save-state"); if (e) e.textContent = text; }
+async function saveSettings() {
   if (!setData) return;
   const changed = {};
   for (const [k, get] of Object.entries(setCtl)) { const v = get(); if (String(v) !== String(setData.values[k])) changed[k] = v; }
-  if (!Object.keys(changed).length) { saveState(g, T.saved); return; }
+  if (!Object.keys(changed).length) { saveState(T.saved); return; }
   const btns = document.querySelectorAll(".save-btn");
-  btns.forEach(b => { b.disabled = true; }); saveState(g, T.saving);
+  btns.forEach(b => { b.disabled = true; }); saveState(T.saving);
   const r = await apiPost("settings", { values: changed });
   btns.forEach(b => { b.disabled = false; });
-  if (!r.ok) { saveState(g, `${T.errSave}: ${r.body && r.body.error ? r.body.error : r.status}`); return; }
+  if (!r.ok) { saveState(`${T.errSave}: ${r.body && r.body.error ? r.body.error : r.status}`); return; }
   const text = T.saved + (r.body.applied_now.length ? ` · ${T.appliedNow}: ${r.body.applied_now.join(", ")}` : "");
-  await loadSettings(); saveState(g, text); refresh();
+  await loadSettings(); saveState(text); refresh();
 }
 
-/* ---------- environment ---------- */
+/* ---------- environment (nerd mode: HDMI ports, HDMI-CEC, audio devices, current options) ---------- */
 // Copy to the clipboard. The page runs in Home Assistant's Ingress iframe where the Clipboard API can be blocked,
 // so fall back to a hidden textarea and execCommand. Returns true on success.
 async function copyText(text) {
@@ -617,8 +605,7 @@ async function loadEnv() {
   $("env-audio").replaceChildren(
     devs.length ? table([T.device, T.description, T.state], rows) : el("span", { className: "sub" }, T.none),
     el("h2", { style: "margin-top:14px" }, T.sinks),
-    sinks.length ? table([T.device, T.state], sinks.map(s => [el("code", {}, s.name), s.state])) : el("span", { className: "sub" }, T.none),
-    el("p", { className: "hint" }, T.noteCfg));
+    sinks.length ? table([T.device, T.state], sinks.map(s => [el("code", {}, s.name), s.state])) : el("span", { className: "sub" }, T.none));
 
   const c = e.cec || {};
   $("env-cec").replaceChildren(
@@ -626,8 +613,6 @@ async function loadEnv() {
        (T["cec_" + c.state] || c.state || "–") + (c.device ? ` (${c.device})` : "") + (c.detail ? ` – ${c.detail}` : "")),
     (c.devices || []).length ? table([T.cecType, T.cecName, T.cecPhys, T.cecPower], c.devices.map(d => [d.type || "–", d.name || "–", d.physical || "–", d.power || "–"])) : "",
     (c.topology || []).length ? el("pre", { className: "nerd-log" }, c.topology.join("\n")) : "");
-  const v = e.video;
-  $("env-video").replaceChildren(table([T.opt, T.val], [[T.hwdec, v.hwdec || "–"], [T.codec, v.codec || "–"], [T.vo, v.vo || "–"], [T.output, v.width ? `${v.width}×${v.height}` + (v.fps ? ` @ ${Math.round(v.fps)} Hz` : "") : "–"], [T.ao, e.audio.current_ao || "–"]]));
   const o = Object.entries(e.options);
   $("env-opts").replaceChildren(o.length ? table([T.opt, T.val], o.map(([k, val]) => [el("code", {}, k), String(val)])) : el("span", { className: "sub" }, T.none));
 }
@@ -639,14 +624,14 @@ function setNerd(on) {
   nerdOn = on; $("nerd-toggle").setAttribute("aria-pressed", on); $("nerd-card").hidden = !on; document.body.classList.toggle("nerd-on", on);
   applyNerd();
   try { on ? localStorage.setItem("tv7-nerd", "1") : localStorage.removeItem("tv7-nerd"); } catch (_) {}
-  if (on && !$("view-set").hidden) loadNerd();
+  if (on && !$("view-set").hidden) { loadNerd(); loadEnv(); }
   renderStatus();
 }
 $("nerd-toggle").onclick = () => setNerd(!nerdOn);
 function applyNerd() { for (const e of document.querySelectorAll("[data-nerd-only]")) e.hidden = !nerdOn; }
 const rate = v => v == null ? null : v >= 1e6 ? (v / 1e6).toFixed(2) + " Mbit/s" : Math.round(v / 1e3) + " kbit/s";
 const num = (v, d = 0) => v == null ? null : Number(v).toFixed(d);
-const join = (...a) => { const x = a.filter(v => v != null && v !== ""); return x.length ? x.join(" · ") : null; };
+const join = (...a) => { const x = a.filter(v => v != null && v !== "" && v !== false); return x.length ? x.join(" · ") : null; };
 let nerdBusy = false, logSig = "", cecSig = "";
 async function loadNerd() {
   if (nerdBusy) return; nerdBusy = true;
@@ -654,8 +639,8 @@ async function loadNerd() {
     const r = await api("nerd");
     if (!r.ok || !nerdOn) return;
     const n = r.body, v = n.video || {}, f = n.frames || {}, a = n.audio || {}, o = n.output || {}, s = n.system || {}, c = s.clock || {}, m = s.memory || {};
-    const box = (title, rows) => el("div", {}, el("h2", {}, title),
-      el("table", {}, el("tbody", {}, rows.map(([k, val]) => el("tr", {}, el("td", {}, k), el("td", {}, val == null || val === "" ? "–" : String(val)))))));
+    const box = (title, rows) => el("div", {}, el("h2", {}, title), el("div", { className: "nerd-frame" },
+      el("table", {}, el("tbody", {}, rows.map(([k, val]) => el("tr", {}, el("td", {}, k), el("td", {}, val == null || val === "" ? "–" : String(val))))))));
     const hw = v.hwdec_current && v.hwdec_current !== "no";
     $("nerd-grid").replaceChildren(
       box(T.nStream, [[T.src, n.source], [T.url, n.url], [T.container, n.format]]),

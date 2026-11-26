@@ -107,6 +107,7 @@ class World:
         self._supervisor()
         self._hdmi()
         self.write_modetest("modetest", MODETEST_OUT)
+        # video_refresh, api_token and subtitles are not in the schema: saving must drop them
         with open(f"{self.tmp}/options.json", "w") as f:
             json.dump(
                 {"hdmi_port": "auto", "video_refresh": "50", "api_token": "secret-should-not-show", "subtitles": True},

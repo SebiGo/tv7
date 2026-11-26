@@ -189,7 +189,6 @@ ACCENT, WHITE = "&H7468ED&", "&HFFFFFF&"  # TV7 coral (237, 104, 116), white (AS
 ACCENT_A, ACCENT_B = "&H7C70F0&", "&H5C4AE0&"  # the web UI's accent gradient #f0707c -> #e04a5c
 PANEL_A, PANEL_B = "&H312823&", "&H26202C&"  # the web UI's dark card gradient #232831 -> #2c2026
 TABS = ("channels", "audio", "subs", "settings")
-VOLUME_STEPS = (50, 60, 70, 80, 90, 100, 110, 120, 130)
 LANG_NAMES = {
     "deu": "Deutsch",
     "ger": "Deutsch",
@@ -418,23 +417,19 @@ def menu_items(tab):
         return out or [{"kind": "header", "label": L["none"]}]
     vals, names, pend = settings.current_values(), settings.labels(menu_lang()), settings.pending_restart()
     out = []
-    for group in ("video", "audio", "system"):  # the groups of the web UI's settings
-        out.append({"kind": "header", "label": L["g_" + group]})
-        for spec in settings.SETTINGS:
-            k = spec["key"]
-            if spec["group"] != group or spec["type"] == "str":  # free text (audio_device): only in the web UI
-                continue
-            if spec["nerd"] and not menu["nerd"] and str(vals.get(k)) == str(settings.DEFAULTS.get(k)):
-                continue  # technical: only in nerd mode, or when changed (like the web UI)
-            locked = k == "cec" and cec.cec_state["state"] in cec.CEC_LOCKED
-            out.append(
-                {
-                    "kind": "item",
-                    "label": names.get(k, {}).get("name", k),
-                    "right": _setting_label(spec, vals.get(k)) + (f" · {L['restart_tag']}" if k in pend else ""),
-                    "act": None if locked else ("set", k),
-                }
-            )
+    for spec in settings.SETTINGS:
+        k = spec["key"]
+        if spec["nerd"] and not menu["nerd"] and str(vals.get(k)) == str(settings.DEFAULTS.get(k)):
+            continue  # technical: only in nerd mode, or when changed (like the web UI)
+        locked = k == "cec" and cec.cec_state["state"] in cec.CEC_LOCKED
+        out.append(
+            {
+                "kind": "item",
+                "label": names.get(k, {}).get("name", k),
+                "right": _setting_label(spec, vals.get(k)) + (f" · {L['restart_tag']}" if k in pend else ""),
+                "act": None if locked else ("set", k),
+            }
+        )
     if pend and supervisor.available():
         out.append({"kind": "item", "label": L["restart"], "mark": True, "act": ("restart", None)})
     out.append({"kind": "item", "label": L["stop"], "act": ("stop", None)})
@@ -651,9 +646,6 @@ def _setting_next(spec, val):
     """The next value of a setting for OK in the TV menu (values the display does not offer are skipped)."""
     if spec["type"] == "bool":
         return not val
-    if spec["type"] == "int":
-        steps = list(VOLUME_STEPS)
-        return next((v for v in steps if v > (val or 0)), steps[0])
     choices = spec["choices"]
     try:
         un = next(

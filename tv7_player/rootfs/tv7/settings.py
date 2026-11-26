@@ -2,7 +2,6 @@
 
 import json
 import os
-import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -14,55 +13,24 @@ def _c(*v):
     return list(v)
 
 
-# key: type (choice|bool|int|str), choices, restart (needs an app restart), group, nerd (technical: the web UI shows it only in nerd mode or when it differs from the default)
+# key, type (choice | bool), choices, default, restart (needs an app restart), nerd (technical: the web UI and the TV
+# menu show it only in nerd mode or when it differs from the default). config.yaml has the same options and defaults
+# (tests/test_files.py checks that).
 SETTINGS = [
     {
         "key": "hdmi_port",
         "type": "choice",
         "choices": _c("auto", "HDMI-A-1", "HDMI-A-2"),
-        "group": "video",
+        "default": "auto",
         "restart": True,
         "nerd": False,
     },
-    {
-        "key": "hdmi_disconnect",
-        "type": "choice",
-        "choices": _c("resume", "stop", "keep"),
-        "group": "video",
-        "restart": False,
-        "nerd": False,
-    },
-    {"key": "cec", "type": "choice", "choices": _c("auto", "off"), "group": "video", "restart": True, "nerd": False},
-    {
-        "key": "video_output",
-        "type": "choice",
-        "choices": _c("auto", "drm", "gpu"),
-        "group": "video",
-        "restart": True,
-        "nerd": True,
-    },
+    {"key": "cec", "type": "choice", "choices": _c("auto", "off"), "default": "auto", "restart": True, "nerd": False},
     {
         "key": "video_mode",
         "type": "choice",
         "choices": _c("auto", "highest", "2160p", "1080p", "720p"),
-        "group": "video",
-        "restart": True,
-        "nerd": True,
-    },
-    {
-        "key": "video_refresh",
-        "type": "choice",
-        "choices": _c("auto", "50", "60"),
-        "group": "video",
-        "restart": True,
-        "nerd": True,
-    },
-    {"key": "deinterlace", "type": "bool", "group": "video", "restart": False, "nerd": True},
-    {
-        "key": "hardware_decoding",
-        "type": "choice",
-        "choices": _c("auto", "no"),
-        "group": "video",
+        "default": "auto",
         "restart": True,
         "nerd": True,
     },
@@ -70,65 +38,30 @@ SETTINGS = [
         "key": "decode_speed",
         "type": "choice",
         "choices": _c("quality", "fast"),
-        "group": "video",
+        "default": "quality",
         "restart": True,
         "nerd": True,
-    },
-    {
-        "key": "audio_output",
-        "type": "choice",
-        "choices": _c("auto", "pulseaudio", "alsa"),
-        "group": "audio",
-        "restart": True,
-        "nerd": True,
-    },
-    {"key": "audio_device", "type": "str", "group": "audio", "restart": False, "nerd": True},
-    {
-        "key": "audio_language",
-        "type": "choice",
-        "choices": _c("auto", "deu", "fra", "ita", "eng", "roh"),
-        "group": "audio",
-        "restart": False,
-        "nerd": False,
     },
     {
         "key": "audio_channels",
         "type": "choice",
         "choices": _c("auto", "stereo"),
-        "group": "audio",
+        "default": "auto",
         "restart": False,
         "nerd": False,
     },
-    {"key": "start_volume", "type": "int", "min": 0, "max": 130, "group": "audio", "restart": False, "nerd": False},
     {
         "key": "idle_stop",
         "type": "choice",
         "choices": _c("off", "60", "120", "180", "240", "480"),
-        "group": "system",
+        "default": "off",
         "restart": False,
         "nerd": False,
     },
-    {"key": "debug", "type": "bool", "group": "system", "restart": True, "nerd": True},
+    {"key": "debug", "type": "bool", "default": False, "restart": True, "nerd": True},
 ]
 BY_KEY = {x["key"]: x for x in SETTINGS}
-DEFAULTS = {
-    "hdmi_port": "auto",
-    "hdmi_disconnect": "resume",
-    "video_output": "auto",
-    "video_mode": "auto",
-    "video_refresh": "auto",
-    "deinterlace": True,
-    "hardware_decoding": "auto",
-    "decode_speed": "quality",
-    "audio_output": "auto",
-    "audio_device": "",
-    "audio_language": "auto",
-    "audio_channels": "auto",
-    "cec": "auto",
-    "start_volume": 100,
-    "idle_stop": "off",
-    "debug": False,
-}
+DEFAULTS = {x["key"]: x["default"] for x in SETTINGS}
 _applied = {}  # what the running process actually uses (restart-only settings keep their start value)
 _saved = {}  # values saved through the UI (the options file may lag behind)
 
@@ -158,21 +91,10 @@ def pending_restart(values=None):
 def apply_live(key, val):
     """Apply a setting to the running app/mpv where possible. Returns True if it took effect now."""
     try:
-        if key == "deinterlace":
-            _applied[key] = val
-            display.update_deinterlace(val)
-        elif key == "audio_language":
-            mpvclient.mpv("set_property", "alang", "" if val == "auto" else f"{val},eng")
-        elif key == "audio_channels":
+        if key == "audio_channels":
             mpvclient.mpv("set_property", "audio-channels", "stereo" if val == "stereo" else "auto-safe")
-        elif key == "start_volume":
-            mpvclient.mpv("set_property", "volume", float(val))
-        elif key in ("hdmi_disconnect", "idle_stop"):
+        elif key == "idle_stop":
             pass  # read by the watcher on every check
-        elif key == "audio_device":
-            if not val:
-                return False  # back to the automatic choice needs a restart
-            mpvclient.mpv("set_property", "audio-device", val)
         else:
             return False
         _applied[key] = val
@@ -213,8 +135,6 @@ def settings_view(lang="en"):
     ports = display.hdmi_ports()
     modes = display.drm_modes()
     sizes = {(m["w"], m["h"]) for lst in modes.values() for m in lst if not m["interlaced"]}
-    hz = sorted({str(round(m["hz"])) for lst in modes.values() for m in lst if m["hz"] and not m["interlaced"]})
-    devs = [d.get("name", "") for d in (mpvclient.prop("audio-device-list") or [])]
     items = []
     for spec in SETTINGS:
         it = dict(spec)
@@ -225,12 +145,8 @@ def settings_view(lang="en"):
             it["unavailable"] = [
                 c for c in spec["choices"] if c in display.VIDEO_PRESETS and display.VIDEO_PRESETS[c] not in sizes
             ]
-        elif k == "video_refresh":
-            it["unavailable"] = [c for c in spec["choices"] if c != "auto" and hz and c not in hz]
         elif k == "cec" and cec.cec_state["state"] in cec.CEC_LOCKED:
             it["locked"] = cec.cec_state["state"]  # the web UI greys the option out and says why
-        elif k == "audio_device":
-            it["suggestions"] = [d for d in devs if d.split("/")[0] in ("pulse", "alsa") and "hdmi" in d.lower()]
         items.append(it)
     cur = current_values()
     return {
@@ -252,19 +168,17 @@ def validate_setting(key, val):
     if t == "bool":
         if not isinstance(val, bool):
             raise ValueError(f"{key}: true or false expected")
-    elif t == "int":
-        if isinstance(val, bool) or not isinstance(val, int) or not spec["min"] <= val <= spec["max"]:
-            raise ValueError(f"{key}: integer {spec['min']}..{spec['max']} expected")
-    elif t == "choice":
-        if val not in spec["choices"]:
-            raise ValueError(f"{key}: one of {spec['choices']} expected")
-    elif t == "str":
-        if not isinstance(val, str) or len(val) > 200 or re.search(r"[\x00-\x1f]", val):
-            raise ValueError(f"{key}: text expected")
+    elif val not in spec["choices"]:
+        raise ValueError(f"{key}: one of {spec['choices']} expected")
     return val
 
 
-OBSOLETE_OPTIONS = ("subtitles", "listen", "api_port", "api_token")
+# options the schema does not have, which a saved options file may still contain: saving drops them, because the
+# Supervisor refuses unknown options
+OBSOLETE_OPTIONS = (
+    "subtitles", "listen", "api_port", "api_token", "hdmi_disconnect", "video_output", "video_refresh", "deinterlace",
+    "hardware_decoding", "audio_output", "audio_device", "audio_language", "start_volume",
+)  # fmt: skip
 
 
 def save_settings(values):
@@ -274,7 +188,7 @@ def save_settings(values):
     if not supervisor.available():
         raise RuntimeError("saving needs the Supervisor API (hassio_api); not available here")
     merged = {**read_options(), **values}  # keeps the options not shown in the web UI
-    for k in OBSOLETE_OPTIONS:  # options of older versions the schema no longer has
+    for k in OBSOLETE_OPTIONS:
         merged.pop(k, None)
     try:
         supervisor.post("/addons/self/options", {"options": merged})

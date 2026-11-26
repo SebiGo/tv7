@@ -43,12 +43,7 @@ def status_view():
         "audio_tracks": mpvclient.tracks()["audio"],
         "sub_tracks": mpvclient.tracks()["sub"],
         "autostopped": dict(player.state.autostopped) or None,
-        "hdmi_stopped": {
-            "channel": player.state.hdmi_stopped["name"],
-            "resume": settings.current_values().get("hdmi_disconnect") == "resume",
-        }
-        if player.state.hdmi_stopped
-        else None,
+        "hdmi_stopped": {"channel": player.state.hdmi_stopped["name"]} if player.state.hdmi_stopped else None,
         "pending_restart": settings.pending_restart(),
         "osd": tvosd.osd_state["on"],
     }

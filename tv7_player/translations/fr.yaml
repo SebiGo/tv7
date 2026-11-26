@@ -3,45 +3,18 @@ configuration:
   hdmi_port:
     name: 'Port HDMI'
     description: 'La sortie HDMI à laquelle le téléviseur est relié. auto la trouve. Sur un Raspberry Pi, HDMI-A-1 est le port à côté de l''alimentation.'
-  hdmi_disconnect:
-    name: 'Quand le téléviseur est éteint'
-    description: 'Ce qui se passe quand le téléviseur est éteint, débranché ou sur une autre source : resume (par défaut) arrête puis reprend la même chaîne quand TV7 est de nouveau affiché ; stop arrête seulement ; keep continue (pour les récepteurs qui signalent à tort le téléviseur comme éteint).'
   cec:
     name: 'Télécommande (HDMI-CEC)'
     description: 'Utiliser TV7 avec la télécommande du téléviseur ou du projecteur. auto (par défaut) l''utilise, sauf si l''intégration HDMI-CEC de Home Assistant le fait déjà ; l''option est alors grisée. off la désactive.'
   video_mode:
     name: 'Résolution de l''image'
     description: 'auto (par défaut) utilise 1080p, adapté aux chaînes. Une résolution plus élevée ne fait que charger l''appareil ; le téléviseur agrandit l''image tout aussi bien.'
-  video_refresh:
-    name: 'Fréquence de l''image'
-    description: 'auto (par défaut) adapte la fréquence du téléviseur à la chaîne, pour des mouvements fluides. 50 ou 60 : fixe.'
-  deinterlace:
-    name: 'Désentrelacement'
-    description: 'Image stable pour les chaînes diffusées en entrelacé (recommandé).'
-  hardware_decoding:
-    name: 'Décodage matériel'
-    description: 'auto (par défaut) utilise si possible le décodeur vidéo de l''appareil, qui reste ainsi frais et silencieux. no : désactivé.'
-  video_output:
-    name: 'Sortie vidéo'
-    description: 'auto (par défaut). À changer seulement si un rapport de bug le demande.'
   decode_speed:
     name: 'Vitesse de décodage'
     description: 'quality (par défaut). fast économise un peu de charge processeur pour une perte de qualité à peine visible.'
-  audio_output:
-    name: 'Sortie audio'
-    description: 'auto (par défaut). S''il n''y a pas de son, essayez pulseaudio ou alsa.'
-  audio_device:
-    name: 'Périphérique audio (avancé)'
-    description: 'Laisser vide. Pour des installations particulières seulement.'
-  audio_language:
-    name: 'Langue audio'
-    description: 'Langue préférée quand une chaîne en propose plusieurs. auto : comme diffusé.'
   audio_channels:
     name: 'Canaux audio'
     description: 'auto transmet le son surround au récepteur ; stereo envoie toujours de la stéréo.'
-  start_volume:
-    name: 'Volume de départ'
-    description: 'Volume au démarrage de l''application, 0 à 130 (100 = inchangé).'
   idle_stop:
     name: 'Arrêt sans utilisation'
     description: 'Arrête la lecture après ce nombre de minutes sans utilisation, pour que l''appareil ne continue pas quand personne ne regarde. off (par défaut) : jamais.'

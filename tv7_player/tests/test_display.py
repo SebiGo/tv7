@@ -42,35 +42,31 @@ def test_plane_fixes():
 
 @pytest.fixture
 def modetest(world, monkeypatch):
-    """resolve(mode, hz, port="", without_1080p=False): (mode, note) from the fake modetest."""
+    """resolve(mode, port="", without_1080p=False): (mode, note) from the fake modetest."""
     other = world.write_modetest("modetest2", MODETEST_OUT.replace("1920x1080 ", "1680x1050 "))
 
-    def resolve(mode, hz, port="", without_1080p=False):
+    def resolve(mode, port="", without_1080p=False):
         monkeypatch.setattr(display, "MODETEST", other if without_1080p else f"{world.tmp}/modetest")
         monkeypatch.setattr(display, "DRM_DIR", world.drm)
-        return display.resolve_mode(mode, hz, port)
+        return display.resolve_mode(mode, port)
 
     return resolve
 
 
-def test_resolve_presets(modetest):
-    assert modetest("1080p", "50", "HDMI-A-1")[0] == "3", "the progressive 50 Hz mode, not the interlaced one"
-    assert modetest("1080p", "60")[0] == "4", "59.94 Hz"
-    assert modetest("2160p", "50")[0] == "1"
-    mode, note = modetest("720p", "50")
+def test_resolve_sizes(modetest):
+    """A size starts at 50 Hz (the channels' rate, so the first channel needs no switch), progressive, not interlaced."""
+    assert modetest("1080p", "HDMI-A-1")[0] == "3"
+    assert modetest("2160p")[0] == "1"
+    mode, note = modetest("720p")
     assert mode == "preferred" and "not offered" in note
-    assert modetest("1080p", "50", "HDMI-A-9")[0] == "preferred", "unknown port"
+    assert modetest("1080p", "HDMI-A-9")[0] == "preferred", "unknown port"
+    assert modetest("highest")[0] == "highest"
 
 
 def test_resolve_auto(modetest):
-    """auto means 1080p when the display offers it, starting at 50 Hz (or at the asked rate); highest passes through."""
-    assert modetest("auto", "auto")[0] == "3" and modetest("auto", "50")[0] == "3" and modetest("auto", "60")[0] == "4"
-    assert modetest("highest", "50")[0] == "highest"
-    assert modetest("1080p", "auto")[0] == "3" and modetest("2160p", "auto")[0] == "1", (
-        "fixed size, rate follows: 50 Hz"
-    )
-    assert modetest("auto", "auto", without_1080p=True)[0] == "1", "no 1080p: the preferred size at 50 Hz"
-    assert modetest("auto", "50", without_1080p=True)[0] == "1"
+    """auto means 1080p at 50 Hz when the display offers it, otherwise the display's preferred size at 50 Hz."""
+    assert modetest("auto")[0] == "3"
+    assert modetest("auto", without_1080p=True)[0] == "1"
 
 
 def test_idle_logo_bgra():
