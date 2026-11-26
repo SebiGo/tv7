@@ -35,6 +35,188 @@ If your TV or projector passes its remote control keys on to connected devices (
 Starting a channel switches TV and receiver to TV7. When you turn the TV off or switch to another source, TV7 stops after a short while and continues the same channel when you switch back. Which keys arrive depends on the TV.
 
 ## Options
+You do not have to change anything: the app finds the HDMI port, the sound output and a good picture by itself. The options are for when you want something else. You find them in **Settings** on the TV7 page, in the TV menu under **Settings**, or on the app's configuration page in Home Assistant.
+
+| Option | What it does |
+|---|---|
+| `hdmi_port` | Which HDMI output of the device the TV is connected to. `auto` (default) finds it. On a Raspberry Pi, `HDMI-A-1` is the port next to the power connector. |
+| `cec` | Control with the TV remote (HDMI-CEC). `auto` (default) uses it unless Home Assistant's HDMI-CEC integration already does; then the option is greyed out. `off` switches it off. |
+| `video_mode` | Picture resolution. `auto` (default) uses 1080p, which fits the channels. Higher resolutions only add load on the device; the TV scales the picture just as well. |
+| `decode_speed` | `quality` (default). `fast` saves a little processor load at a barely visible cost in picture quality. |
+| `audio_channels` | `auto` (default) passes surround sound on to the receiver; `stereo` always sends stereo. |
+| `idle_stop` | Stops playback after 60 to 480 minutes without operation, so the device does not keep playing when nobody watches. `off` (default): never. |
+| `debug` | More details in the app log, for bug reports. |
+
+Options marked "restart" in the settings take effect after the app restarts; the page shows a button for it.
+
+### What the app does by itself
+- **Picture:** the TV's refresh rate follows the channel (smooth motion). Channels broadcast interlaced are deinterlaced. Where the device has a video decoder, the app uses it; that keeps the device cool and quiet.
+- **Sound:** goes to the TV or receiver over HDMI. The audio language is the one the channel broadcasts first; switch it in the player or in the TV menu while a channel plays. The volume is 100 % when the app starts.
+- **TV off or another source:** TV7 stops after a short while and continues the same channel when the TV shows TV7 again.
+
+The configuration page also shows an **Audio** section. The app does not use it; leave it as it is.
+
+## Control from Home Assistant
+**As a media player:** the ready-made package [tv7_media_player.yaml](https://github.com/SebiGo/tv7/blob/main/docs/tv7_media_player.yaml) adds `media_player.tv7` to Home Assistant: channel list (favorites first) with logo, start, stop, channel up/down, volume and mute, for dashboards and automations. How to install it is written at the top of the file.
+
+Scripts and automations of this Home Assistant control the player at `http://127.0.0.1:8765` (all calls are `GET`).
+
+| Call | Effect |
+|---|---|
+| `/play?channel=SRF%201` | start a channel by name or number |
+| `/stop` | stop |
+| `/volume?v=50` or `?d=5` | set or change the volume |
+| `/mute` | mute on/off |
+| `/status` | what is playing |
+| `/channels` | channel list |
+| `/osd?on=1` / `?on=0` | technical details on the TV picture on/off |
+| `/key?k=ok` | a remote control key (`ok`, `up`, `down`, `left`, `right`, `back`, `ch_up`, `ch_down`, `info`, `stop`, `0`–`9`) |
+
+```yaml
+rest_command:
+  tv7_play:
+    url: "http://127.0.0.1:8765/play?channel={{ channel | urlencode }}"
+    timeout: 70
+  tv7_stop:
+    url: "http://127.0.0.1:8765/stop"
+
+script:
+  tv7_srf1:
+    sequence:
+      - action: rest_command.tv7_play
+        data:
+          channel: "SRF 1"
+```
+
+## Good to know
+- The channel list comes live from Init7; new channels appear without an update.
+- If the TV was off when the app started, the first channel takes a few seconds longer.
+
+## Problems
+- **No sound:** check that the TV or receiver is on the right HDMI input and not muted. Then switch on **Nerd mode** and look at the audio devices in **Settings**: an HDMI device should be marked active. If none is, restart the app; if there is still no sound, send a bug report (see below).
+- **No picture:** switch the TV to the right input; with two HDMI ports, try `hdmi_port`.
+- **Bug report:** press **Copy support info** at the top of **Settings** and paste the text into a new issue at https://github.com/SebiGo/tv7/issues. Passwords, tokens and addresses are masked with `****`; read the text once before you post it.
+
+## Changelog
+The changes are listed in the Changelog tab of the app. Versions follow [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
+
+## License
+MIT, see [LICENSE.md](https://github.com/SebiGo/tv7/blob/main/LICENSE.md). The TV7 name and logo belong to Init7 (Schweiz) AG and are excluded.
+
+---
+
+# Deutsch
+
+Init7 TV7 und die SRG-Full-HD-Sender auf dem Fernseher schauen, der an deinem Home-Assistant-Gerät hängt. Die Sender wählst du auf der Seite **TV7** in der Seitenleiste von Home Assistant, mit der Fernbedienung des Fernsehers oder aus Automationen.
+
+## Was du brauchst
+- Einen Init7-Internetanschluss (die Sender gibt es nur im Init7-Netz).
+- Ein Gerät mit Home Assistant OS und HDMI-Ausgang, angeschlossen an Fernseher, Projektor oder AV-Receiver. Entwickelt und getestet auf einem Raspberry Pi 5.
+
+## Installation
+1. Einstellungen > Apps > App-Store > Menü (⋮) > Repositories: `https://github.com/SebiGo/tv7` hinzufügen.
+2. **TV7 Player** installieren, **In der Seitenleiste anzeigen** einschalten und die App starten.
+3. **TV7** in der Seitenleiste öffnen und einen Sender wählen.
+
+Kein Bild oder kein Ton? Fernseher oder Receiver auf den HDMI-Eingang des Geräts stellen. Hilft das nicht, siehe unten "Probleme".
+
+## Benutzung
+
+### In Home Assistant
+- **Player:** oben deine **Favoriten** (Stern am Sender antippen), darunter der laufende Sender mit vorherigem/nächstem Sender, Stopp, Lautstärke, Stumm, Tonsprache und Untertiteln. Weiter unten: Suche und die Senderlisten **SRG Full HD** und **TV7**. Untertitel sind bei jedem Senderstart aus; bei Bedarf hier einschalten.
+- **Einstellungen:** alle Optionen als Auswahlmenüs und Schalter. Die meisten Änderungen wirken sofort; Optionen mit "Neustart" zeigen einen Knopf zum Neustarten der App.
+- **Nerd-Modus** (Knopf oben): technische Angaben für Neugierige und für Fehlermeldungen, dazu die technischen Einstellungen und eine Übersicht über das Gerät: HDMI-Anschlüsse, Geräte an HDMI-CEC, Audiogeräte und die aktuellen Optionen. Der Browser merkt sich die Wahl.
+
+### Mit der Fernbedienung des Fernsehers
+Reicht dein Fernseher oder Projektor die Tasten seiner Fernbedienung an angeschlossene Geräte weiter (HDMI-CEC, meist schon eingeschaltet), geht TV7 auch ohne Handy:
+- **OK** öffnet das Menü im Fernsehbild: ▲ ▼ wählen, ◀ ▶ zwischen **Sender**, **Ton**, **Untertitel** und **Einstellungen** wechseln, **OK** auswählen, **Zurück** schliessen.
+- Ohne Menü: **Kanal +/−** schaltet um, **Ziffern** wählen eine Sendernummer, **Info** blendet technische Angaben ein, **Play** startet den letzten Sender wieder.
+- Jeder Senderstart zeigt kurz ein Banner mit Logo und Name. Läuft nichts, zeigt der Fernseher das TV7-Logo.
+
+Ein Senderstart schaltet Fernseher und Receiver auf TV7. Schaltest du den Fernseher aus oder auf eine andere Quelle, stoppt TV7 nach kurzer Zeit und setzt denselben Sender fort, sobald du zurückschaltest. Welche Tasten ankommen, hängt vom Fernseher ab.
+
+## Optionen
+Du musst nichts einstellen: Die App findet den HDMI-Anschluss, die Tonausgabe und ein gutes Bild selbst. Die Optionen sind für den Fall, dass du etwas anderes willst. Du findest sie unter **Einstellungen** auf der Seite TV7, im Fernsehmenü unter **Einstellungen** oder auf der Konfigurationsseite der App in Home Assistant.
+
+| Option | Was sie tut |
+|---|---|
+| `hdmi_port` | An welchem HDMI-Ausgang des Geräts der Fernseher hängt. `auto` (Standard) findet ihn. Beim Raspberry Pi ist `HDMI-A-1` der Anschluss neben der Stromversorgung. |
+| `cec` | Bedienung mit der Fernbedienung des Fernsehers (HDMI-CEC). `auto` (Standard) nutzt sie, ausser die HDMI-CEC-Integration von Home Assistant tut das schon; dann ist die Option ausgegraut. `off` schaltet sie aus. |
+| `video_mode` | Bildauflösung. `auto` (Standard) nimmt 1080p, das passt zu den Sendern. Höhere Auflösungen belasten nur das Gerät; der Fernseher skaliert das Bild genauso gut. |
+| `decode_speed` | `quality` (Standard). `fast` spart etwas Prozessorlast bei kaum sichtbar geringerer Bildqualität. |
+| `audio_channels` | `auto` (Standard) gibt Surround-Ton an den Receiver weiter; `stereo` sendet immer Stereo. |
+| `idle_stop` | Stoppt die Wiedergabe nach 60 bis 480 Minuten ohne Bedienung, damit das Gerät nicht weiterspielt, wenn niemand schaut. `off` (Standard): nie. |
+| `debug` | Mehr Angaben im Protokoll der App, für Fehlermeldungen. |
+
+Optionen, die in den Einstellungen mit "Neustart" markiert sind, wirken nach einem Neustart der App; die Seite zeigt dafür einen Knopf.
+
+### Was die App von selbst macht
+- **Bild:** Die Bildwiederholrate des Fernsehers folgt dem Sender (flüssige Bewegungen). Sender im Zeilensprungverfahren werden in Vollbilder umgerechnet. Hat das Gerät einen Video-Decoder, nutzt die App ihn; das hält das Gerät kühl und leise.
+- **Ton:** geht über HDMI an Fernseher oder Receiver. Die Tonsprache ist die, die der Sender zuerst sendet; umschalten kannst du sie im Player oder im Fernsehmenü, während ein Sender läuft. Beim Start der App ist die Lautstärke 100 %.
+- **Fernseher aus oder andere Quelle:** TV7 stoppt nach kurzer Zeit und setzt denselben Sender fort, sobald der Fernseher wieder TV7 zeigt.
+
+Auf der Konfigurationsseite erscheint ausserdem ein Abschnitt **Audio**. Die App nutzt ihn nicht; lass ihn unverändert.
+
+## Steuerung aus Home Assistant
+**Als Media Player:** das fertige Paket [tv7_media_player.yaml](https://github.com/SebiGo/tv7/blob/main/docs/tv7_media_player.yaml) fügt Home Assistant `media_player.tv7` hinzu: Senderliste (Favoriten zuerst) mit Logo, Start, Stopp, Sender auf/ab, Lautstärke und Ton aus, für Dashboards und Automationen. Wie man es installiert, steht oben in der Datei (auf Englisch).
+
+Skripte und Automationen dieses Home Assistant steuern den Player unter `http://127.0.0.1:8765` (alle Aufrufe sind `GET`).
+
+| Aufruf | Wirkung |
+|---|---|
+| `/play?channel=SRF%201` | Sender starten (Name oder Nummer) |
+| `/stop` | Stopp |
+| `/volume?v=50` oder `?d=5` | Lautstärke setzen oder ändern |
+| `/mute` | Stumm ein/aus |
+| `/status` | was gerade läuft |
+| `/channels` | Senderliste |
+| `/osd?on=1` / `?on=0` | technische Angaben im Fernsehbild ein/aus |
+| `/key?k=ok` | eine Fernbedienungstaste (`ok`, `up`, `down`, `left`, `right`, `back`, `ch_up`, `ch_down`, `info`, `stop`, `0`–`9`) |
+
+Ein Beispiel mit `rest_command` und `script` steht im englischen Abschnitt.
+
+## Gut zu wissen
+- Die Senderliste kommt live von Init7; neue Sender erscheinen ohne Update.
+- War der Fernseher beim Start der App aus, dauert der erste Senderstart ein paar Sekunden länger.
+
+## Probleme
+- **Kein Ton:** prüfen, ob Fernseher oder Receiver auf dem richtigen HDMI-Eingang und nicht stumm sind. Dann den **Nerd-Modus** einschalten und unter **Einstellungen** die Audiogeräte ansehen: Ein HDMI-Gerät sollte als aktiv markiert sein. Ist keines aktiv, die App neu starten; bleibt es still, einen Fehler melden (siehe unten).
+- **Kein Bild:** den Fernseher auf den richtigen Eingang stellen; bei zwei HDMI-Anschlüssen `hdmi_port` ausprobieren.
+- **Fehler melden:** oben in den **Einstellungen** auf **Support-Infos kopieren** drücken und den Text in ein neues Issue unter https://github.com/SebiGo/tv7/issues einfügen. Passwörter, Tokens und Adressen sind mit `****` maskiert; den Text vor dem Posten einmal durchlesen.
+
+---
+
+# Français
+
+Regardez Init7 TV7 et les chaînes SRG Full HD sur le téléviseur relié à votre appareil Home Assistant. Vous choisissez les chaînes sur la page **TV7** de la barre latérale de Home Assistant, avec la télécommande du téléviseur ou depuis des automatisations.
+
+## Prérequis
+- Une connexion Internet Init7 (les chaînes ne sont disponibles que dans le réseau Init7).
+- Un appareil sous Home Assistant OS avec sortie HDMI, relié au téléviseur, au projecteur ou au récepteur AV. Développé et testé sur un Raspberry Pi 5.
+
+## Installation
+1. Paramètres > Applications > Boutique d'applications > menu (⋮) > Dépôts : ajouter `https://github.com/SebiGo/tv7`.
+2. Installer **TV7 Player**, activer **Afficher dans la barre latérale** et démarrer l'application.
+3. Ouvrir **TV7** dans la barre latérale et choisir une chaîne.
+
+Pas d'image ou pas de son ? Mettez le téléviseur ou le récepteur sur l'entrée HDMI de l'appareil. Si cela ne suffit pas, voir « Problèmes » ci-dessous.
+
+## Utilisation
+
+### Dans Home Assistant
+- **Lecteur :** en haut vos **favoris** (touchez l'étoile d'une chaîne), puis la chaîne en cours avec chaîne précédente/suivante, arrêt, volume, muet, langue audio et sous-titres. Plus bas : la recherche et les listes **SRG Full HD** et **TV7**. Les sous-titres sont désactivés à chaque démarrage de chaîne ; activez-les ici si besoin.
+- **Réglages :** toutes les options sous forme de menus et d'interrupteurs. La plupart des changements s'appliquent tout de suite ; les options marquées « redémarrage » affichent un bouton pour redémarrer l'application.
+- **Mode nerd** (bouton en haut) : détails techniques pour les curieux et pour les rapports de bug, ainsi que les réglages techniques et un aperçu de l'appareil : ports HDMI, appareils sur HDMI-CEC, périphériques audio et options actuelles. Le navigateur retient le choix.
+
+### Avec la télécommande du téléviseur
+Si votre téléviseur ou projecteur transmet les touches de sa télécommande aux appareils connectés (HDMI-CEC, généralement activé), TV7 s'utilise aussi sans téléphone :
+- **OK** ouvre le menu à l'écran : ▲ ▼ choisir, ◀ ▶ passer entre **Chaînes**, **Audio**, **Sous-titres** et **Réglages**, **OK** valider, **Retour** fermer.
+- Sans menu : **chaîne +/−** change de chaîne, les **chiffres** choisissent un numéro de chaîne, **Info** affiche les détails techniques, **Play** relance la dernière chaîne.
+- Chaque démarrage de chaîne affiche brièvement un bandeau avec logo et nom. Quand rien ne joue, le téléviseur affiche le logo TV7.
+
+Le démarrage d'une chaîne bascule le téléviseur et le récepteur sur TV7. Si vous éteignez le téléviseur ou passez à une autre source, TV7 s'arrête peu après et reprend la même chaîne quand vous revenez. Les touches transmises dépendent du téléviseur.
+
+## Options
 Vous n'avez rien à régler : l'application trouve elle-même le port HDMI, la sortie son et une bonne image. Les options servent quand vous voulez autre chose. Vous les trouvez dans **Réglages** sur la page TV7, dans le menu du téléviseur sous **Réglages** ou sur la page de configuration de l'application dans Home Assistant.
 
 | Option | Ce qu'elle fait |
